@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { SiteFooter } from "@/components/site-footer";
+import { SiteHeader } from "@/components/site-header";
 
 /**
  * `next/font/google` downloads these at BUILD time and self-hosts them from our
@@ -34,6 +35,9 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
       <body className="flex min-h-full flex-col">
+        {/* Server-rendered so the signed-in state is right in the first paint;
+            a header that flashes "Sign in" then swaps is a layout shift. */}
+        <SiteHeader />
         {children}
         {/* Legal links must be reachable from every page: the attribution page
             carries our GPLv3 source offer (NFR-L3), and privacy/terms are
