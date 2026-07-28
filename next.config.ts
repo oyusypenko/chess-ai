@@ -34,6 +34,13 @@ export const SECURITY_HEADERS = [
 ] as const;
 
 const nextConfig: NextConfig = {
+  // Dev-only. Next blocks cross-origin dev resources by default, and it treats
+  // `127.0.0.1` and `localhost` as different origins — so a dev server started
+  // on one and opened on the other silently fails its HMR socket, which in turn
+  // stalls hydration and makes the page look rendered but dead. Listing both
+  // removes a confusing failure that looks like an application bug.
+  allowedDevOrigins: ["127.0.0.1", "localhost"],
+
   async headers() {
     return [
       {
