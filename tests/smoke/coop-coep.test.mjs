@@ -25,6 +25,7 @@ import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { setTimeout as sleep } from "node:timers/promises";
+import { join } from "node:path";
 
 const EXTERNAL = process.env.SMOKE_BASE_URL;
 const PORT = process.env.SMOKE_PORT ?? "3123";
@@ -36,9 +37,16 @@ let server;
 before(async () => {
   if (EXTERNAL) return; // caller owns the target
 
-  server = spawn("npx", ["next", "start", "--port", PORT], {
+  // Spawn the Next binary directly rather than through `npx`. An `npx` wrapper
+  // does not forward SIGTERM to its child, so `next start` would survive
+  // teardown, keep its stdio pipes open, and hang `node --test` forever (seen
+  // in CI, where the runner has no TTY to clean up after us).
+  // `detached: true` puts it in its own process group so we can kill the group.
+  const nextBin = process.platform === "win32" ? "next.cmd" : "next";
+  server = spawn(join("node_modules", ".bin", nextBin), ["start", "--port", PORT], {
     stdio: ["ignore", "pipe", "pipe"],
     env: { ...process.env, NODE_ENV: "production" },
+    detached: process.platform !== "win32",
   });
 
   let stderr = "";
@@ -61,7 +69,22 @@ before(async () => {
   }
 });
 
-after(() => server?.kill("SIGTERM"));
+after(() => {
+  if (!server?.pid) return;
+  try {
+    // Negative pid = whole process group, so the real `next start` dies too and
+    // does not outlive the test run.
+    if (process.platform === "win32") server.kill("SIGTERM");
+    else process.kill(-server.pid, "SIGTERM");
+  } catch {
+    // Already gone — nothing to clean up.
+  }
+  // Explicitly release the pipes: an open stdio stream keeps the Node event
+  // loop alive even after the child exits, which is the actual hang.
+  server.stdout?.destroy();
+  server.stderr?.destroy();
+  server.unref();
+});
 
 test("document is served with cross-origin isolation headers (FR-7)", async () => {
   const res = await fetch(BASE);

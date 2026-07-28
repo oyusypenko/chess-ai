@@ -13,6 +13,7 @@ jobs:
   validate:
     name: typecheck · lint · format · test
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
 
@@ -38,6 +39,10 @@ jobs:
   smoke:
     name: cross-origin isolation headers (FR-7)
     runs-on: ubuntu-latest
+    # Job-level cap plus per-step caps below: a smoke test that spawns servers
+    # can hang instead of failing, and a hang with no timeout burns runner
+    # hours and reports nothing useful.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
 
@@ -58,12 +63,14 @@ jobs:
         run: npm run build
 
       - name: Assert headers from the Next.js server
+        timeout-minutes: 3
         run: npm run test:headers
 
       - name: Build (OpenNext → Cloudflare Worker)
         run: npx opennextjs-cloudflare build
 
       - name: Assert headers from the Cloudflare Worker
+        timeout-minutes: 5
         run: |
           npx wrangler dev --port 8788 --local > /tmp/wrangler.log 2>&1 &
           for i in $(seq 1 45); do
@@ -76,6 +83,7 @@ jobs:
   guardrails:
     name: project hard rules
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v5
 
