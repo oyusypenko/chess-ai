@@ -10,15 +10,54 @@ import type { NormalizedGame } from "@/model/game";
  * no generated SQL to reverse-engineer when something is slow or wrong.
  */
 
+/**
+ * A user account.
+ *
+ * `lichess_id` and `email` are both nullable and at least one is always set —
+ * an account exists because someone can sign in to it, and there are now two
+ * ways to do that. The schema enforces the "at least one" part with a CHECK
+ * rather than leaving it to whichever code path creates the row.
+ */
 export type UserRecord = {
   id: string;
-  lichess_id: string;
-  lichess_name: string;
+  email: string | null;
+  /** Never leaves the server. Absent means "no password set", never "any password". */
+  password_hash: string | null;
+  email_verified_at: string | null;
+  lichess_id: string | null;
+  lichess_name: string | null;
   created_at: string;
   last_seen_at: string;
   plan: "free" | "paid";
   plan_until: string | null;
   deletion_requested_at: string | null;
+};
+
+/**
+ * What to call this person in the UI.
+ *
+ * Centralised because `user.lichess_name` used to be safe to read directly and
+ * now is not — an email-only account has none, and every call site that assumed
+ * otherwise would render "undefined" or crash.
+ */
+export function displayName(user: UserRecord): string {
+  if (user.lichess_name) return user.lichess_name;
+  if (user.email) return user.email.split("@")[0];
+  return "Account";
+}
+
+/** How a session was opened. Surfaced to the user in the session list. */
+export type AuthMethod = "lichess" | "password";
+
+export type SessionRow = {
+  id: string;
+  user_id: string;
+  created_at: string;
+  expires_at: string;
+  last_used_at: string | null;
+  auth_method: AuthMethod;
+  user_agent: string | null;
+  ip_hash: string | null;
 };
 
 export type GameRow = {
@@ -73,34 +112,151 @@ export async function upsertUserByLichessId(
   ]);
 
   if (existing) {
+    const seenAt = nowIso();
     await db.run("UPDATE users SET last_seen_at = ?, lichess_name = ? WHERE id = ?", [
-      nowIso(),
+      seenAt,
       lichessName,
       existing.id,
     ]);
-    return { ...existing, lichess_name: lichessName, last_seen_at: nowIso() };
+    return { ...existing, lichess_name: lichessName, last_seen_at: seenAt };
   }
 
-  const user: UserRecord = {
-    id: crypto.randomUUID(),
-    lichess_id: lichessId,
-    lichess_name: lichessName,
-    created_at: nowIso(),
-    last_seen_at: nowIso(),
-    plan: "free",
-    plan_until: null,
-    deletion_requested_at: null,
-  };
+  const createdAt = nowIso();
+  const id = crypto.randomUUID();
   await db.run(
     `INSERT INTO users (id, lichess_id, lichess_name, created_at, last_seen_at, plan)
      VALUES (?, ?, ?, ?, ?, 'free')`,
-    [user.id, user.lichess_id, user.lichess_name, user.created_at, user.last_seen_at],
+    [id, lichessId, lichessName, createdAt, createdAt],
   );
-  return user;
+  return requireUserRow(db, id);
 }
 
 export function getUser(db: Db, userId: string): Promise<UserRecord | null> {
   return db.first<UserRecord>("SELECT * FROM users WHERE id = ?", [userId]);
+}
+
+export function getUserByLichessId(db: Db, lichessId: string): Promise<UserRecord | null> {
+  return db.first<UserRecord>("SELECT * FROM users WHERE lichess_id = ?", [
+    lichessId.toLowerCase(),
+  ]);
+}
+
+/**
+ * Re-read a row we just wrote, rather than assembling the object in TypeScript.
+ *
+ * Hand-built return values drift from the schema silently: every column with a
+ * SQL default is one the literal has to duplicate, and nothing fails when it
+ * stops matching. Reading back costs one query on a path that runs once per
+ * account.
+ */
+async function requireUserRow(db: Db, userId: string): Promise<UserRecord> {
+  const row = await getUser(db, userId);
+  if (!row) throw new Error(`User ${userId} vanished immediately after being written`);
+  return row;
+}
+
+// ---------------------------------------------------------------- password auth
+
+export class EmailTakenError extends Error {
+  constructor() {
+    super("An account with that email already exists");
+    this.name = "EmailTakenError";
+  }
+}
+
+/**
+ * Look up by email.
+ *
+ * The caller is responsible for having normalized the address — but so is this
+ * function, because "the caller normalizes" is a convention and conventions are
+ * how two rows for `Alice@x.com` and `alice@x.com` end up in a UNIQUE column
+ * that was supposed to prevent exactly that.
+ */
+export function getUserByEmail(db: Db, email: string): Promise<UserRecord | null> {
+  return db.first<UserRecord>("SELECT * FROM users WHERE email = ?", [email.trim().toLowerCase()]);
+}
+
+/**
+ * Create an email+password account.
+ *
+ * Takes an already-hashed password. Hashing is not this layer's job, and a
+ * repository that accepted a plaintext password would be one refactor away from
+ * storing it.
+ */
+export async function createUserWithPassword(
+  db: Db,
+  email: string,
+  passwordHash: string,
+): Promise<UserRecord> {
+  const normalized = email.trim().toLowerCase();
+  const createdAt = nowIso();
+  const id = crypto.randomUUID();
+
+  try {
+    await db.run(
+      `INSERT INTO users (id, email, password_hash, created_at, last_seen_at, plan)
+       VALUES (?, ?, ?, ?, ?, 'free')`,
+      [id, normalized, passwordHash, createdAt, createdAt],
+    );
+  } catch (error) {
+    // The UNIQUE index is the authority on whether an address is taken, not a
+    // prior SELECT — between that SELECT and this INSERT, another request can
+    // claim it. Translating the constraint violation is what makes the check
+    // race-free.
+    if (isUniqueViolation(error)) throw new EmailTakenError();
+    throw error;
+  }
+
+  return requireUserRow(db, id);
+}
+
+export async function updatePasswordHash(
+  db: Db,
+  userId: string,
+  passwordHash: string,
+): Promise<void> {
+  await db.run("UPDATE users SET password_hash = ? WHERE id = ?", [passwordHash, userId]);
+}
+
+/**
+ * Attach a Lichess identity to an account that already exists.
+ *
+ * This is what makes "I signed up with email, now connect my Lichess" work
+ * without creating a second account holding half the user's games.
+ */
+export async function linkLichessAccount(
+  db: Db,
+  userId: string,
+  lichessId: string,
+  lichessName: string,
+): Promise<UserRecord> {
+  try {
+    await db.run(
+      "UPDATE users SET lichess_id = ?, lichess_name = ?, last_seen_at = ? WHERE id = ?",
+      [lichessId, lichessName, nowIso(), userId],
+    );
+  } catch (error) {
+    if (isUniqueViolation(error)) throw new LichessAlreadyLinkedError();
+    throw error;
+  }
+  return requireUserRow(db, userId);
+}
+
+export class LichessAlreadyLinkedError extends Error {
+  constructor() {
+    super("That Lichess account is already connected to a different account");
+    this.name = "LichessAlreadyLinkedError";
+  }
+}
+
+/**
+ * Both backends report a UNIQUE violation as a message, not a code we can
+ * switch on — node:sqlite raises `SQLITE_CONSTRAINT_UNIQUE`, D1 wraps SQLite's
+ * text. Matching on the message is unlovely but it is what is actually on offer.
+ */
+function isUniqueViolation(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /UNIQUE constraint failed/i.test(message);
 }
 
 /**
@@ -173,40 +329,181 @@ export async function deleteAccessToken(db: Db, userId: string): Promise<void> {
 
 // ---------------------------------------------------------------- sessions
 
+export type SessionContext = {
+  /** How the session was opened. Recorded so the user can see it later. */
+  authMethod?: AuthMethod;
+  /** Raw User-Agent header; truncated on the way in. */
+  userAgent?: string | null;
+  /** Client IP. Hashed here — the plaintext address is never stored. */
+  ip?: string | null;
+  /** Lifetime in days. Negative values create an already-expired session (tests). */
+  ttlDays?: number;
+};
+
+/**
+ * The session id is 256 bits from the CSPRNG, not a UUIDv4.
+ *
+ * A v4 UUID carries 122 bits of entropy and spends the rest on version and
+ * variant bits — fine for a primary key, needlessly close to the line for a
+ * bearer credential that is, on its own, sufficient to act as the user. This is
+ * the one identifier in the schema where guessability is the entire threat.
+ */
+function newSessionId(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(new ArrayBuffer(32)));
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 export async function createSession(
   db: Db,
   userId: string,
-  ttlDays = 30,
+  context: SessionContext = {},
 ): Promise<{ id: string; expiresAt: string }> {
-  const id = crypto.randomUUID();
+  const ttlDays = context.ttlDays ?? 30;
+  const id = newSessionId();
+  const createdAt = nowIso();
   const expiresAt = new Date(Date.now() + ttlDays * 86_400_000).toISOString();
-  await db.run("INSERT INTO sessions (id, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)", [
-    id,
-    userId,
-    nowIso(),
-    expiresAt,
-  ]);
+
+  await db.run(
+    `INSERT INTO sessions (id, user_id, created_at, expires_at, last_used_at, auth_method, user_agent, ip_hash)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      id,
+      userId,
+      createdAt,
+      expiresAt,
+      createdAt,
+      context.authMethod ?? "lichess",
+      // Truncated: we want it recognisable in a list, not a complete
+      // fingerprint, and UA strings are long enough to bloat every row.
+      context.userAgent?.slice(0, 255) ?? null,
+      context.ip ? await hashIp(context.ip) : null,
+    ],
+  );
   return { id, expiresAt };
 }
 
-export async function getSessionUser(db: Db, sessionId: string): Promise<UserRecord | null> {
-  const row = await db.first<UserRecord & { expires_at: string }>(
-    `SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id
+/**
+ * SHA-256 of the address.
+ *
+ * Storing the IP itself would turn the session table into a location history —
+ * personal data we would then have to disclose, defend, and delete on request
+ * (NFR-PR2). The hash still answers the only question the feature asks: is this
+ * the same network as the session above it?
+ */
+async function hashIp(ip: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(ip));
+  return Array.from(new Uint8Array(digest).slice(0, 8), (b) =>
+    b.toString(16).padStart(2, "0"),
+  ).join("");
+}
+
+/**
+ * Resolve a session to its user, returning `last_used_at` alongside.
+ *
+ * The extra column rides along on a query we were making anyway, so the caller
+ * can decide whether a "last used" write is due without a second read. That is
+ * what keeps the touch below genuinely once-a-day rather than a no-op UPDATE
+ * issued on every single page view.
+ */
+export async function getSessionWithUser(
+  db: Db,
+  sessionId: string,
+): Promise<{ user: UserRecord; lastUsedAt: string | null } | null> {
+  const row = await db.first<UserRecord & { __last_used_at: string | null }>(
+    `SELECT u.*, s.last_used_at AS __last_used_at
+     FROM sessions s JOIN users u ON u.id = s.user_id
      WHERE s.id = ? AND s.expires_at > ?`,
     [sessionId, nowIso()],
   );
-  return row ?? null;
+  if (!row) return null;
+  const { __last_used_at: lastUsedAt, ...user } = row;
+  return { user, lastUsedAt };
+}
+
+export async function getSessionUser(db: Db, sessionId: string): Promise<UserRecord | null> {
+  return (await getSessionWithUser(db, sessionId))?.user ?? null;
+}
+
+/**
+ * Record activity.
+ *
+ * The `last_used_at` predicate makes a concurrent double-touch harmless, but
+ * callers are still expected to check staleness first — this is a write, and
+ * putting one on every page view to update a field read only in a settings list
+ * is a poor trade on a per-write-billed database.
+ */
+export async function touchSession(db: Db, sessionId: string): Promise<void> {
+  const now = nowIso();
+  await db.run(
+    "UPDATE sessions SET last_used_at = ? WHERE id = ? AND (last_used_at IS NULL OR last_used_at < ?)",
+    [now, sessionId, now.slice(0, 10)],
+  );
+}
+
+/** Whether `last_used_at` is stale enough to be worth a write (once per UTC day). */
+export function needsTouch(lastUsedAt: string | null): boolean {
+  return !lastUsedAt || lastUsedAt.slice(0, 10) < nowIso().slice(0, 10);
+}
+
+/** Sessions for the account, newest first (US-A4). */
+export function listSessions(db: Db, userId: string): Promise<SessionRow[]> {
+  return db.all<SessionRow>(
+    "SELECT * FROM sessions WHERE user_id = ? AND expires_at > ? ORDER BY created_at DESC",
+    [userId, nowIso()],
+  );
 }
 
 export async function deleteSession(db: Db, sessionId: string): Promise<void> {
   await db.run("DELETE FROM sessions WHERE id = ?", [sessionId]);
 }
 
-/** Housekeeping: expired sessions and PKCE states are not worth retaining. */
+/**
+ * Revoke one session, scoped to its owner.
+ *
+ * `user_id` is in the predicate, not checked by the caller. Session ids are
+ * unguessable, but "unguessable" is not an authorization model — without this,
+ * a leaked id from any source would let one account sign out another.
+ */
+export async function deleteUserSession(
+  db: Db,
+  userId: string,
+  sessionId: string,
+): Promise<boolean> {
+  const existing = await db.first<{ id: string }>(
+    "SELECT id FROM sessions WHERE id = ? AND user_id = ?",
+    [sessionId, userId],
+  );
+  if (!existing) return false;
+  await db.run("DELETE FROM sessions WHERE id = ? AND user_id = ?", [sessionId, userId]);
+  return true;
+}
+
+/**
+ * Sign out everywhere else, keeping the caller's own session.
+ *
+ * This is the action a user takes when they think they have been compromised,
+ * so it must not also sign *them* out — being thrown back to a login screen at
+ * that moment is how people give up halfway through securing their account.
+ */
+export async function deleteOtherSessions(
+  db: Db,
+  userId: string,
+  keepSessionId: string,
+): Promise<void> {
+  await db.run("DELETE FROM sessions WHERE user_id = ? AND id != ?", [userId, keepSessionId]);
+}
+
+/** Revoke every session for a user — used when the password changes. */
+export async function deleteAllSessions(db: Db, userId: string): Promise<void> {
+  await db.run("DELETE FROM sessions WHERE user_id = ?", [userId]);
+}
+
+/** Housekeeping: expired sessions, PKCE states and throttles are not worth retaining. */
 export async function purgeExpired(db: Db): Promise<void> {
   const now = nowIso();
   await db.run("DELETE FROM sessions WHERE expires_at <= ?", [now]);
   await db.run("DELETE FROM oauth_states WHERE expires_at <= ?", [now]);
+  await db.run("DELETE FROM auth_throttle WHERE expires_at <= ?", [Date.now()]);
 }
 
 // ---------------------------------------------------------------- oauth state

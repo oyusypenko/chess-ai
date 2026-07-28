@@ -2,12 +2,15 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import {
   consumeOAuthState,
-  createSession,
+  getUserByLichessId,
+  linkLichessAccount,
+  LichessAlreadyLinkedError,
   saveAccessToken,
   upsertUserByLichessId,
 } from "@/db/repositories";
 import { exchangeCodeForToken, fetchAccount, OAuthError } from "@/auth/lichess-oauth";
-import { setSessionCookie } from "@/auth/session";
+import { currentUser } from "@/auth/session";
+import { openSession } from "@/auth/sign-in";
 import { readKeyMaterial } from "@/db/crypto";
 import { track } from "@/server/telemetry";
 
@@ -66,7 +69,35 @@ export async function GET(request: Request): Promise<NextResponse> {
     });
 
     const account = await fetchAccount(token.access_token);
-    const user = await upsertUserByLichessId(db, account.id.toLowerCase(), account.username);
+    const lichessId = account.id.toLowerCase();
+
+    // Already signed in? Then this is "connect Lichess to my existing account",
+    // not "sign in". Creating a fresh user here would silently split someone's
+    // history across two accounts — games under one, reports under the other —
+    // with no way for them to tell what happened.
+    const signedInUser = await currentUser(db);
+    let user;
+
+    if (signedInUser && !signedInUser.lichess_id) {
+      try {
+        user = await linkLichessAccount(db, signedInUser.id, lichessId, account.username);
+      } catch (linkError) {
+        if (linkError instanceof LichessAlreadyLinkedError)
+          return failure("lichess_already_linked");
+        throw linkError;
+      }
+    } else if (signedInUser && signedInUser.lichess_id === lichessId) {
+      // Re-authorising the account already attached. Refresh the token below.
+      user = signedInUser;
+    } else if (signedInUser) {
+      // Signed in as one Lichess account, authorised a different one. Silently
+      // switching accounts would be surprising; refuse and say why.
+      const other = await getUserByLichessId(db, lichessId);
+      if (!other) return failure("lichess_mismatch");
+      user = other;
+    } else {
+      user = await upsertUserByLichessId(db, lichessId, account.username);
+    }
 
     await saveAccessToken(db, user.id, token.access_token, keyMaterial, {
       expiresAt: token.expires_in
@@ -75,8 +106,9 @@ export async function GET(request: Request): Promise<NextResponse> {
       scopes: "",
     });
 
-    const session = await createSession(db, user.id);
-    await setSessionCookie(session.id, session.expiresAt);
+    // Already-signed-in users keep the session they arrived with; only a fresh
+    // sign-in opens a new one.
+    if (!signedInUser) await openSession(db, user.id, request, "lichess");
 
     // No username in the event (FR-6).
     track("username_submitted", { via: "oauth" });

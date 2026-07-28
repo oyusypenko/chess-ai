@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getDb } from "@/db";
 import { currentUser } from "@/auth/session";
-import { listGames } from "@/db/repositories";
+import { displayName, listGames } from "@/db/repositories";
 import { GameList, type GameListItem } from "@/features/games/game-list";
 
 /**
@@ -44,7 +44,7 @@ export default async function GamesPage() {
         <div className="flex flex-col gap-1">
           <h1 className="text-2xl font-semibold tracking-tight">Your games</h1>
           <p className="text-sm text-black/60 dark:text-white/60">
-            Signed in as {user.lichess_name}
+            Signed in as {displayName(user)}
           </p>
         </div>
         <nav className="flex gap-3 text-sm">

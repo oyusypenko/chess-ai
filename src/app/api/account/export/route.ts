@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { requireUser, UnauthorizedError } from "@/auth/session";
-import { listGames, listReports } from "@/db/repositories";
+import { displayName, listGames, listReports, listSessions } from "@/db/repositories";
 import type { NormalizedGame } from "@/model/game";
 
 /**
@@ -30,27 +30,43 @@ export async function GET(request: Request): Promise<NextResponse> {
 
   const format = new URL(request.url).searchParams.get("format") ?? "json";
   const games = await listGames(db, user.id, { limit: 100 });
+  // Filename-safe: an email local-part can contain characters that would break
+  // the Content-Disposition header or, worse, be read as a second parameter.
+  const slug = displayName(user).replace(/[^a-zA-Z0-9_-]/g, "-");
 
   if (format === "pgn") {
     const pgn = games.map((row) => toPgn(JSON.parse(row.payload) as NormalizedGame)).join("\n\n");
     return new NextResponse(pgn, {
       headers: {
         "Content-Type": "application/x-chess-pgn; charset=utf-8",
-        "Content-Disposition": `attachment; filename="chesscoach-games-${user.lichess_name}.pgn"`,
+        "Content-Disposition": `attachment; filename="chesscoach-games-${slug}.pgn"`,
       },
     });
   }
 
   const reports = await listReports(db, user.id, 500);
+  const sessions = await listSessions(db, user.id);
 
   const payload = {
     exportedAt: new Date().toISOString(),
     account: {
+      email: user.email,
       lichessId: user.lichess_id,
       lichessName: user.lichess_name,
       createdAt: user.created_at,
       plan: user.plan,
     },
+    // Sessions are personal data we hold about them, so they belong in a
+    // subject-access export. The session ids are not included: they are live
+    // bearer credentials, and a downloadable file full of them is a file that
+    // signs in as the user if it ever leaks.
+    sessions: sessions.map((session) => ({
+      createdAt: session.created_at,
+      lastUsedAt: session.last_used_at,
+      expiresAt: session.expires_at,
+      authMethod: session.auth_method,
+      userAgent: session.user_agent,
+    })),
     games: games.map((row) => JSON.parse(row.payload)),
     reports: reports.map((report) => ({
       gameId: report.game_id,
@@ -61,13 +77,13 @@ export async function GET(request: Request): Promise<NextResponse> {
       accuracy: report.accuracy,
       createdAt: report.created_at,
     })),
-    note: "Your Lichess access token is not included: it is a credential, not personal data, and is deleted when you delete your account.",
+    note: "Your Lichess access token, your password hash, and your session ids are not included: they are credentials, not personal data, and are deleted when you delete your account.",
   };
 
   return new NextResponse(JSON.stringify(payload, null, 2), {
     headers: {
       "Content-Type": "application/json; charset=utf-8",
-      "Content-Disposition": `attachment; filename="chesscoach-export-${user.lichess_name}.json"`,
+      "Content-Disposition": `attachment; filename="chesscoach-export-${slug}.json"`,
     },
   });
 }

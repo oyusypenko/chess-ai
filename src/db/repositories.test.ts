@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { sqliteDb, type Db } from "./client";
+import { migrate } from "./index";
 import {
   upsertUserByLichessId,
   saveAccessToken,
@@ -19,17 +18,32 @@ import {
   getReport,
   deleteUser,
   purgeExpired,
+  createUserWithPassword,
+  getUserByEmail,
+  getUser,
+  updatePasswordHash,
+  linkLichessAccount,
+  listSessions,
+  deleteUserSession,
+  deleteOtherSessions,
+  touchSession,
+  needsTouch,
+  EmailTakenError,
+  LichessAlreadyLinkedError,
 } from "./repositories";
 import { generateKeyBase64, encryptToken, decryptToken } from "./crypto";
 import type { NormalizedGame } from "@/model/game";
 
-const SCHEMA = readFileSync(join(process.cwd(), "migrations", "0001_initial.sql"), "utf8");
 const KEY = generateKeyBase64();
 
 let db: Db;
 beforeEach(async () => {
   db = await sqliteDb(":memory:");
-  await db.exec(SCHEMA);
+  // The real migration runner, not a hand-picked schema file. Tests that build
+  // their own schema stop testing the one that ships the moment a migration is
+  // added — and `0002` rebuilds `users`, so that divergence would have been
+  // invisible right up until production.
+  await migrate(db);
 });
 
 function game(overrides: Partial<NormalizedGame> = {}): NormalizedGame {
@@ -133,7 +147,7 @@ describe("sessions", () => {
 
   it("refuses an expired session", async () => {
     const user = await upsertUserByLichessId(db, "p", "P");
-    const session = await createSession(db, user.id, -1); // already expired
+    const session = await createSession(db, user.id, { ttlDays: -1 }); // already expired
     expect(await getSessionUser(db, session.id)).toBeNull();
   });
 
@@ -150,7 +164,7 @@ describe("sessions", () => {
 
   it("purges expired sessions", async () => {
     const user = await upsertUserByLichessId(db, "p", "P");
-    await createSession(db, user.id, -1);
+    await createSession(db, user.id, { ttlDays: -1 });
     await purgeExpired(db);
     expect(await db.all("SELECT * FROM sessions")).toHaveLength(0);
   });
@@ -332,5 +346,180 @@ describe("account deletion (US-A4, NFR-PR3)", () => {
     for (const table of ["users", "oauth_tokens", "sessions", "games", "reports"]) {
       expect(await db.all(`SELECT * FROM ${table}`), `${table} not cleared`).toHaveLength(0);
     }
+  });
+});
+
+describe("email + password accounts (US-A2)", () => {
+  const HASH = "pbkdf2-sha256$600000$c2FsdA==$ZGVyaXZlZA==";
+
+  it("creates an account with no Lichess identity at all", async () => {
+    const user = await createUserWithPassword(db, "player@example.com", HASH);
+    expect(user.email).toBe("player@example.com");
+    expect(user.lichess_id).toBeNull();
+    expect(user.lichess_name).toBeNull();
+  });
+
+  it("normalizes the address on write and on lookup", async () => {
+    await createUserWithPassword(db, "  Player@Example.COM ", HASH);
+    // Both spellings must find the one row, or the UNIQUE index protects nothing.
+    expect(await getUserByEmail(db, "player@example.com")).not.toBeNull();
+    expect(await getUserByEmail(db, "PLAYER@EXAMPLE.com")).not.toBeNull();
+  });
+
+  it("refuses a duplicate address", async () => {
+    await createUserWithPassword(db, "player@example.com", HASH);
+    await expect(createUserWithPassword(db, "PLAYER@example.com", HASH)).rejects.toThrow(
+      EmailTakenError,
+    );
+  });
+
+  it("returns null for an unknown address", async () => {
+    expect(await getUserByEmail(db, "nobody@example.com")).toBeNull();
+  });
+
+  it("links a Lichess account to an existing email account", async () => {
+    // The alternative — creating a second user — silently splits someone's
+    // history across two accounts.
+    const user = await createUserWithPassword(db, "player@example.com", HASH);
+    const linked = await linkLichessAccount(db, user.id, "player", "Player");
+    expect(linked.id).toBe(user.id);
+    expect(linked.lichess_name).toBe("Player");
+    expect(linked.email).toBe("player@example.com");
+  });
+
+  it("refuses to link a Lichess account already attached elsewhere", async () => {
+    await upsertUserByLichessId(db, "player", "Player");
+    const other = await createUserWithPassword(db, "other@example.com", HASH);
+    await expect(linkLichessAccount(db, other.id, "player", "Player")).rejects.toThrow(
+      LichessAlreadyLinkedError,
+    );
+  });
+
+  it("keeps an OAuth-only account free of a password hash", async () => {
+    const user = await upsertUserByLichessId(db, "player", "Player");
+    expect(user.password_hash).toBeNull();
+    expect(user.email).toBeNull();
+  });
+
+  it("replaces the hash on change", async () => {
+    const user = await createUserWithPassword(db, "player@example.com", HASH);
+    await updatePasswordHash(db, user.id, "pbkdf2-sha256$600000$bmV3$bmV3");
+    expect((await getUser(db, user.id))?.password_hash).toBe("pbkdf2-sha256$600000$bmV3$bmV3");
+  });
+
+  it("cascades deletion for a password account exactly as for an OAuth one", async () => {
+    const user = await createUserWithPassword(db, "player@example.com", HASH);
+    await createSession(db, user.id);
+    await saveGame(db, user.id, game());
+
+    await deleteUser(db, user.id);
+
+    expect(await db.all("SELECT * FROM sessions")).toHaveLength(0);
+    expect(await db.all("SELECT * FROM games")).toHaveLength(0);
+  });
+});
+
+describe("schema constraints", () => {
+  it("refuses an account with neither an email nor a Lichess id", async () => {
+    // The CHECK is the backstop for a future "disconnect Lichess" feature
+    // stranding an account nobody can sign in to.
+    await expect(
+      db.run("INSERT INTO users (id, created_at, last_seen_at) VALUES ('x', 'now', 'now')"),
+    ).rejects.toThrow();
+  });
+
+  it("refuses a password hash without an email to sign in with", async () => {
+    await expect(
+      db.run(
+        "INSERT INTO users (id, lichess_id, lichess_name, password_hash, created_at, last_seen_at) VALUES ('x', 'l', 'L', 'h', 'now', 'now')",
+      ),
+    ).rejects.toThrow();
+  });
+});
+
+describe("session management (US-A4)", () => {
+  it("records how the session was opened", async () => {
+    const user = await upsertUserByLichessId(db, "p", "P");
+    const session = await createSession(db, user.id, { authMethod: "password" });
+    const rows = await listSessions(db, user.id);
+    expect(rows.find((r) => r.id === session.id)?.auth_method).toBe("password");
+  });
+
+  it("stores a hash of the IP, never the address itself", async () => {
+    const user = await upsertUserByLichessId(db, "p", "P");
+    await createSession(db, user.id, { ip: "203.0.113.7" });
+    const [row] = await listSessions(db, user.id);
+    // A session table full of plaintext IPs is a location log we would have to
+    // defend and disclose.
+    expect(row.ip_hash).not.toContain("203.0.113.7");
+    expect(row.ip_hash).toMatch(/^[0-9a-f]+$/);
+  });
+
+  it("truncates an absurd user-agent instead of storing it whole", async () => {
+    const user = await upsertUserByLichessId(db, "p", "P");
+    await createSession(db, user.id, { userAgent: "U".repeat(5000) });
+    const [row] = await listSessions(db, user.id);
+    expect(row.user_agent!.length).toBeLessThanOrEqual(255);
+  });
+
+  it("uses an unguessable session id", async () => {
+    const user = await upsertUserByLichessId(db, "p", "P");
+    const session = await createSession(db, user.id);
+    // 32 bytes hex. This value is a bearer credential on its own.
+    expect(session.id).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("lists only live sessions", async () => {
+    const user = await upsertUserByLichessId(db, "p", "P");
+    await createSession(db, user.id);
+    await createSession(db, user.id, { ttlDays: -1 });
+    expect(await listSessions(db, user.id)).toHaveLength(1);
+  });
+
+  it("revokes one session and leaves the others alone", async () => {
+    const user = await upsertUserByLichessId(db, "p", "P");
+    const keep = await createSession(db, user.id);
+    const drop = await createSession(db, user.id);
+
+    expect(await deleteUserSession(db, user.id, drop.id)).toBe(true);
+    expect(await getSessionUser(db, drop.id)).toBeNull();
+    expect(await getSessionUser(db, keep.id)).not.toBeNull();
+  });
+
+  it("will not let one account revoke another's session", async () => {
+    // Session ids are unguessable, but "unguessable" is not an authorization
+    // model.
+    const mine = await upsertUserByLichessId(db, "mine", "Mine");
+    const theirs = await upsertUserByLichessId(db, "theirs", "Theirs");
+    const victim = await createSession(db, theirs.id);
+
+    expect(await deleteUserSession(db, mine.id, victim.id)).toBe(false);
+    expect(await getSessionUser(db, victim.id)).not.toBeNull();
+  });
+
+  it("signs out everywhere else while keeping the current session", async () => {
+    const user = await upsertUserByLichessId(db, "p", "P");
+    const current = await createSession(db, user.id);
+    const other = await createSession(db, user.id);
+
+    await deleteOtherSessions(db, user.id, current.id);
+
+    // Signing the user out mid-way through securing their account is how they
+    // abandon it half-done.
+    expect(await getSessionUser(db, current.id)).not.toBeNull();
+    expect(await getSessionUser(db, other.id)).toBeNull();
+  });
+
+  it("touches last_used_at at most once a day", async () => {
+    const user = await upsertUserByLichessId(db, "p", "P");
+    const session = await createSession(db, user.id);
+
+    const before = (await listSessions(db, user.id))[0].last_used_at;
+    expect(needsTouch(before)).toBe(false); // just created, today
+    expect(needsTouch(null)).toBe(true);
+    expect(needsTouch("2020-01-01T00:00:00.000Z")).toBe(true);
+
+    await touchSession(db, session.id);
+    expect((await listSessions(db, user.id))[0].last_used_at).not.toBeNull();
   });
 });

@@ -1,17 +1,23 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { CredentialsForm } from "@/features/auth/credentials-form";
+import { safeRedirect } from "@/auth/sign-in";
 
 export const metadata: Metadata = {
   title: "Sign in — ChessCoach AI",
-  description: "Connect your Lichess account to save your reports and track your progress.",
+  description: "Sign in with your email, or connect your Lichess account.",
 };
 
 /**
  * Login page (US-A2).
  *
- * Mobile-first (D-08). The copy states exactly what we ask for and what we do
- * not, because the honest version is also the reassuring one: we request **no
- * permissions at all**, which is unusual enough to be worth saying plainly.
+ * Two ways in, and the order is deliberate: Lichess first, because a user who
+ * connects it gets their games imported immediately, while an email account
+ * starts empty until they link one. The email form is offered plainly beneath
+ * rather than hidden behind a "more options" toggle — people who want it should
+ * not have to hunt.
+ *
+ * Mobile-first (D-08).
  */
 
 const ERRORS: Record<string, string> = {
@@ -19,6 +25,10 @@ const ERRORS: Record<string, string> = {
   expired_or_replayed: "That sign-in link expired. Please start again.",
   provider_error: "Lichess couldn't complete the sign-in. Please try again.",
   not_configured: "Sign-in isn't configured on this deployment yet.",
+  lichess_already_linked:
+    "That Lichess account is already connected to a different ChessCoach account.",
+  lichess_mismatch:
+    "That Lichess account isn't the one connected to the account you're signed in to. Sign out first, then try again.",
   unexpected: "Something went wrong signing you in. Please try again.",
 };
 
@@ -29,14 +39,16 @@ export default async function LoginPage({
 }) {
   const params = await searchParams;
   const error = params.error ? (ERRORS[params.error] ?? ERRORS.unexpected) : null;
-  const redirectTo = params.redirect_to ?? "/games";
+  // Validated here as well as in the API route: this value is interpolated into
+  // a link the user clicks, so it must not be able to point off-site.
+  const redirectTo = safeRedirect(params.redirect_to);
 
   return (
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-6 px-4 py-12">
       <header className="flex flex-col gap-2">
         <h1 className="text-2xl font-semibold tracking-tight">Sign in</h1>
         <p className="text-sm text-black/70 dark:text-white/70">
-          Connect your Lichess account to keep your reports and see your weaknesses across games.
+          Keep your reports and see your weaknesses across games.
         </p>
       </header>
 
@@ -62,6 +74,25 @@ export default async function LoginPage({
       >
         Continue with Lichess
       </a>
+
+      <div className="flex items-center gap-3" aria-hidden="true">
+        <span className="h-px flex-1 bg-black/10 dark:bg-white/15" />
+        <span className="text-xs text-black/45 dark:text-white/45">or</span>
+        <span className="h-px flex-1 bg-black/10 dark:bg-white/15" />
+      </div>
+
+      <CredentialsForm mode="signin" redirectTo={redirectTo} />
+
+      <p className="text-sm text-black/70 dark:text-white/70">
+        Don&rsquo;t have an account?{" "}
+        <Link
+          className="underline underline-offset-2"
+          href={`/register?redirect_to=${encodeURIComponent(redirectTo)}`}
+        >
+          Create one
+        </Link>
+        .
+      </p>
 
       <section className="flex flex-col gap-2 rounded-lg border border-black/10 p-3 text-xs dark:border-white/15">
         <h2 className="text-sm font-medium">What we ask for</h2>

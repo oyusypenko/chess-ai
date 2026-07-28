@@ -49,10 +49,25 @@ export async function POST(request: Request): Promise<NextResponse> {
     );
   }
 
+  // An email+password account has no Lichess handle, and there is nothing to
+  // import without one. Say so plainly instead of querying the export endpoint
+  // for `null` and surfacing whatever Lichess makes of that.
+  const lichessName = user.lichess_name;
+  if (!lichessName) {
+    return NextResponse.json(
+      {
+        ok: false,
+        kind: "not_linked",
+        message: "Connect your Lichess account to import games.",
+      },
+      { status: 409 },
+    );
+  }
+
   const max = Number(new URL(request.url).searchParams.get("max") ?? DEFAULT_MAX);
 
   try {
-    const raw = await fetchUserGames(user.lichess_name, {
+    const raw = await fetchUserGames(lichessName, {
       max: Number.isFinite(max) ? Math.min(Math.max(max, 1), 100) : DEFAULT_MAX,
       signal: request.signal,
     });
@@ -63,7 +78,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       try {
         // Normalization enforces NFR-L1 on its own; a game that fails it is
         // skipped rather than failing the whole sync.
-        const game = normalizeLichessGame(rawGame, user.lichess_name);
+        const game = normalizeLichessGame(rawGame, lichessName);
         await saveGame(db, user.id, game);
         imported += 1;
       } catch {

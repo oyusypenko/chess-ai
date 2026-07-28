@@ -10,6 +10,9 @@ import type { UserRecord } from "@/db/repositories";
 function user(overrides: Partial<UserRecord> = {}): UserRecord {
   return {
     id: "u1",
+    email: null,
+    password_hash: null,
+    email_verified_at: null,
     lichess_id: "player",
     lichess_name: "Player",
     created_at: "2026-01-01T00:00:00.000Z",

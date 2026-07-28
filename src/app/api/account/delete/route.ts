@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { requireUser, UnauthorizedError, clearSessionCookie } from "@/auth/session";
-import { deleteUser } from "@/db/repositories";
+import { deleteUser, displayName } from "@/db/repositories";
 
 /**
  * `POST /api/account/delete` — account deletion (US-A4, NFR-PR3).
@@ -35,9 +35,12 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, message: "Malformed request." }, { status: 400 });
   }
 
-  if ((body?.confirm ?? "").trim().toLowerCase() !== user.lichess_name.toLowerCase()) {
+  // The handle for a Lichess account, the email local-part for a password one —
+  // either way, something the owner knows and a stray POST does not.
+  const confirmWord = displayName(user);
+  if ((body?.confirm ?? "").trim().toLowerCase() !== confirmWord.toLowerCase()) {
     return NextResponse.json(
-      { ok: false, message: `Type ${user.lichess_name} to confirm deletion.` },
+      { ok: false, message: `Type ${confirmWord} to confirm deletion.` },
       { status: 400 },
     );
   }
