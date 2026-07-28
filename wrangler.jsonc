@@ -17,6 +17,17 @@
       "service": "chess-ai",
     },
   ],
+  // D1 (SQLite) for accounts, games and reports (P1). Create with:
+  //   npx wrangler d1 create chess-ai
+  // then paste the returned database_id here and run `npm run db:migrate`.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "chess-ai",
+      "database_id": "REPLACE_WITH_ID_FROM_WRANGLER_D1_CREATE",
+      "migrations_dir": "migrations",
+    },
+  ],
   "observability": {
     "enabled": true,
   },
