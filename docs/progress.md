@@ -16,18 +16,18 @@ but was never run is `in progress`.
 
 ## Phase 0 — Claude Code & repo tooling · **done**
 
-| Item                                                               | State       | Verified                                                                                                                  |
-| ------------------------------------------------------------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `CLAUDE.md` — project map                                          | done        | 2026-07-28 · reviewed against reference setup                                                                             |
-| `docs/prd.md` — requirements                                       | done        | 2026-07-28 · authority doc, verbatim from product                                                                         |
-| `docs/implementation-plan.md` — research + milestones              | done        | 2026-07-28 · library/licensing research with sources                                                                      |
-| `.claude/rules/` — 2 always-on + 5 path-scoped                     | done        | 2026-07-28 · front-matter paths checked                                                                                   |
-| `.claude/agents/` — architect, engine, backend, frontend, reviewer | done        | 2026-07-28 · registered by the harness                                                                                    |
-| `.claude/skills/` — story, fairplay-check, spec-check, progress    | done        | 2026-07-28 · registered by the harness                                                                                    |
-| `.claude/hooks/` — hard-rules, secrets, format, stop-typecheck     | done        | 2026-07-28 · **15/15 payload tests pass**                                                                                 |
-| `.claude/settings.json`, `.mcp.json`                               | done        | 2026-07-28 · valid JSON, hooks resolve, no secrets                                                                        |
-| `docs/progress.md`, `docs/decisions.md`                            | done        | 2026-07-28 · 7 decisions recorded, 7 open questions                                                                       |
-| `docs/attribution.md` — GPL/asset notices                          | in progress | Skeleton written; Stockfish source-offer URL and cburnett licence are **launch blockers** (NFR-L3/L2), filled in at M3/M5 |
+| Item                                                                           | State       | Verified                                                                                                                  |
+| ------------------------------------------------------------------------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `CLAUDE.md` — project map                                                      | done        | 2026-07-28 · reviewed against reference setup                                                                             |
+| `docs/prd.md` — requirements                                                   | done        | 2026-07-28 · authority doc, verbatim from product                                                                         |
+| `docs/implementation-plan.md` — research + milestones                          | done        | 2026-07-28 · library/licensing research with sources                                                                      |
+| `.claude/rules/` — 2 always-on + 5 path-scoped                                 | done        | 2026-07-28 · front-matter paths checked                                                                                   |
+| `.claude/agents/` — architect, engine, backend, frontend, reviewer             | done        | 2026-07-28 · registered by the harness                                                                                    |
+| `.claude/skills/` — story, fairplay-check, spec-check, progress, **skeletons** | done        | 2026-07-28 · registered by the harness; `/skeletons` added per D-08                                                       |
+| `.claude/hooks/` — hard-rules, secrets, format, stop-typecheck                 | done        | 2026-07-28 · **15/15 payload tests pass**                                                                                 |
+| `.claude/settings.json`, `.mcp.json`                                           | done        | 2026-07-28 · valid JSON, hooks resolve, no secrets; MCP = context7 + playwright (360×800 default)                         |
+| `docs/progress.md`, `docs/decisions.md`                                        | done        | 2026-07-28 · 7 decisions recorded, 7 open questions                                                                       |
+| `docs/attribution.md` — GPL/asset notices                                      | in progress | Skeleton written; Stockfish source-offer URL and cburnett licence are **launch blockers** (NFR-L3/L2), filled in at M3/M5 |
 
 ---
 
@@ -49,8 +49,9 @@ but was never run is `in progress`.
 **Deferred from M1, deliberately:**
 
 - **Browser-level assertion that `crossOriginIsolated === true`** — the HTTP headers that cause it
-  are asserted at both layers, and `/` renders the live value, but no headless browser reads it
-  yet. Playwright lands in **M3**, where the engine worker gives it something worth driving.
+  are asserted at both layers, and `/` renders the live value, but no browser reads it yet.
+  Unblocked by D-08: the Playwright MCP is now configured, so this can be asserted directly from
+  **M2** onward rather than waiting for M3.
 - **Vercel EU region** → replaced by Cloudflare (D-05). EU data residency is now **O-8**, open, and
   must be settled before P1 stores personal data.
 - **NFR-P1 (TTI < 3 s on 4G)** — not measurable against a placeholder page; measured at M5 when the
@@ -58,14 +59,14 @@ but was never run is `in progress`.
 
 ### Remaining P0 milestones
 
-| Milestone                    | Stories                         | State       | Notes                                                                                                                   |
-| ---------------------------- | ------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------- |
-| **M2 · Lichess import**      | US-A1 (partial), US-B1, FR-2    | not started | ← **next.** Public export by username, NDJSON, normalize to internal model, friendly errors, 429 backoff                |
-| **M3 · Engine analysis**     | US-C1, US-C2                    | not started | Stockfish WASM in Worker, depth ≥18/1M nodes, progress+cancel, IndexedDB cache, single-thread fallback, eval provenance |
-| **M4 · Move classification** | US-C4                           | not started | Win-probability deltas, clean-room, original names/icons, ≥50 fixtures CI-gated                                         |
-| **M5 · Report UI**           | US-G1, US-D2                    | not started | Board + move list + eval graph + badges + key moments, 360 px, WCAG AA basics                                           |
-| **M6 · AI summary**          | US-D1, FR-4                     | not started | Structured payload → LLM → **grounding validator** → ≤250 words; engine-only degradation                                |
-| **M7 · Launch hardening**    | US-A1, FR-6, NFR-PR2, NFR-L2/L3 | not started | 3 reports/IP/day server-side, email capture + consent, funnel telemetry, privacy/ToS, attribution page, ≤60 s p75       |
+| Milestone                    | Stories                         | State       | Notes                                                                                                                                                        |
+| ---------------------------- | ------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **M2 · Lichess import**      | US-A1 (partial), US-B1, FR-2    | not started | ← **next.** Public export by username, NDJSON, normalize to internal model, friendly errors, 429 backoff                                                     |
+| **M3 · Engine analysis**     | US-C1, US-C2                    | not started | Stockfish WASM in Worker, depth ≥18/1M nodes, progress+cancel, IndexedDB cache, single-thread fallback, eval provenance                                      |
+| **M4 · Move classification** | US-C4                           | not started | Win-probability deltas, clean-room, original names/icons, ≥50 fixtures CI-gated                                                                              |
+| **M5 · Report UI**           | US-G1, US-D2                    | not started | **Mobile-first** board + move list + eval graph + badges + key moments; paired skeletons per `/skeletons`; verified at 360 px via Playwright MCP; CLS ≤ 0.05 |
+| **M6 · AI summary**          | US-D1, FR-4                     | not started | Structured payload → LLM → **grounding validator** → ≤250 words; engine-only degradation                                                                     |
+| **M7 · Launch hardening**    | US-A1, FR-6, NFR-PR2, NFR-L2/L3 | not started | 3 reports/IP/day server-side, email capture + consent, funnel telemetry, privacy/ToS, attribution page, ≤60 s p75                                            |
 
 ## P1 — MVP (outline)
 

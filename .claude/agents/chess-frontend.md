@@ -42,29 +42,46 @@ next.config.*         // COOP/COEP headers (FR-7) — the engine depends on thes
    third-party asset needs CORP/CORS headers or it must be self-hosted.
 4. **Analysis never runs on the main thread** (US-C1). Consume the worker's progress events; show
    per-move progress; offer cancel.
-5. **Responsive to 360 px** (US-G1). Most users are mobile-web. Board, move list, and eval graph
-   all work at that width — verify, don't assume.
-6. **Accessibility is a requirement** (NFR-C2): keyboard navigation for board and move list
+5. **Mobile-first, not merely responsive** (US-G1). Most users are mobile-web. Write base classes
+   for narrow screens; add `sm:`/`md:`/`lg:` to widen. Never build desktop-first and rescue with
+   `max-*:`. **360 px is the first viewport you build and verify, not the last** — board, move
+   list, and eval graph must line up there before any wider width is considered.
+6. **Every loading state is a paired skeleton** — load the **`/skeletons`** skill before writing
+   one. Not spinners, not `null`. A report fills in across four stages (game metadata → engine
+   evals → classifications → LLM summary); each boundary is a layout shift unless the skeleton is
+   geometry-exact. Target CLS ≤ 0.05, stricter than the 0.1 "good" threshold, because staged fill
+   is the burst pattern the metric punishes.
+7. **Accessibility is a requirement** (NFR-C2): keyboard navigation for board and move list
    (← → through moves), visible focus, sufficient contrast, alt text. Classification badges must
    not encode meaning in colour alone — a colour-blind user needs the label or shape too.
-7. **All user-facing strings externalized** from the first component (NFR-C3). No hardcoded copy.
-8. **Degraded states are designed** (NFR-R1, NFR-R2, US-A1): LLM down → engine-only report with
+8. **All user-facing strings externalized** from the first component (NFR-C3). No hardcoded copy.
+9. **Degraded states are designed** (NFR-R1, NFR-R2, US-A1): LLM down → engine-only report with
    "AI summary pending" retry; single-threaded engine → adjusted-expectations messaging; unknown
    user / zero games → a friendly error, never a stack trace; rate-limited → "retrying…".
-9. **Client-side entitlement checks are cosmetic only** (US-F3). Never gate value client-side and
-   assume it holds.
-10. **Post-game only** (NFR-L1) applies to UI too: no surface that could show evals or best moves
+10. **Client-side entitlement checks are cosmetic only** (US-F3). Never gate value client-side and
+    assume it holds.
+11. **Post-game only** (NFR-L1) applies to UI too: no surface that could show evals or best moves
     alongside a game in progress.
-11. **Landing TTI < 3 s on 4G mid-range mobile**, Core Web Vitals good (NFR-P1). The engine WASM is
+12. **Landing TTI < 3 s on 4G mid-range mobile**, Core Web Vitals good (NFR-P1). The engine WASM is
     lazy-loaded and must never block first paint.
 
 ## Test obligations
 
-- COOP/COEP smoke test asserting `crossOriginIsolated === true` on the deployed headers (FR-7).
+**Browser verification runs through the Playwright MCP, at 360 px first.** Reading classes is not
+verification — Tailwind resolves same-property conflicts by stylesheet order, so the class list
+routinely lies about the rendered box. Measure it.
+
+- COOP/COEP smoke test asserting the served headers (FR-7), plus a browser-level assertion that
+  `crossOriginIsolated === true` once Playwright MCP is in the loop.
+- **Mobile-first layout check at 360 px** for every view, before any wider width. Then 768/1280.
+- **Skeleton parity**: `getBoundingClientRect()` diff between loading and loaded states for every
+  corresponding node; any delta > ~4 px is a bug. Measure the real swap with a `layout-shift`
+  PerformanceObserver — contribution must be < 0.05. See the `/skeletons` skill.
 - Keyboard navigation: ← → move through the game, focus visible, move list and board stay synced.
-- 360 px layout check for the report view.
 - Degraded-state rendering: engine-only report, single-thread notice, import error, rate-limit
-  notice — each renders, none blanks.
+  notice — each renders in its reserved geometry, none blanks, none resizes its container on
+  arrival.
+- `prefers-reduced-motion`: skeleton pulses and board animations respect it (NFR-C2).
 - No hardcoded user-facing strings (lint or test-level check).
 
 ## Docs-first rule (mandatory, every iteration)

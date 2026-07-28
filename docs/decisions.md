@@ -92,6 +92,34 @@ formally blocked M1, and an implicit approval that is never written down gets re
 Vitest for unit tests; Prettier + ESLint. Hosting is Cloudflare per D-05, **not** the Vercel EU
 that plan §2 originally proposed.
 
+### D-08 · 2026-07-28 · Mobile-first UI, skeleton loading states, Playwright-MCP verification
+
+**Status:** decided (user directive)
+**Alternatives:** responsive-but-desktop-first with `max-*:` overrides; spinners or `null` for
+loading; verifying layout by reading class names.
+**Why:** US-G1 already required 360 px support, but "responsive" and "mobile-first" are different
+commitments — a desktop-first layout squeezed down shifts differently, usually worse, on the
+viewport most of our users are actually on. And this product is unusually exposed to layout shift:
+a report fills in across **four** stages (game metadata → engine evals → classifications → LLM
+summary), which is precisely the burst pattern CLS scoring punishes hardest.
+**What this binds us to:**
+
+- Base classes target narrow screens; `sm:`/`md:`/`lg:` widen. 360 px is verified **first**.
+- Loading states are **paired skeletons** with 1:1 geometry — never spinners or `null`. The
+  `/skeletons` skill (adapted from the reference implementation in `feels`) is mandatory reading
+  before writing one, and carries the chess-specific reservations: the board is `aspect-square`,
+  the move list reserves a viewport rather than N rows, the eval graph is fixed-height from first
+  paint, classification chips are fixed-size regardless of label length, and the "AI summary
+  pending" degradation box must be the same height as the resolved summary (NFR-R1).
+- **CLS target ≤ 0.05**, stricter than the 0.1 "good" threshold NFR-P1 inherits from Core Web
+  Vitals.
+- Verification is by **measurement in a real browser via the Playwright MCP**, not by reading
+  class names — Tailwind resolves same-property conflicts by stylesheet order, so the class list
+  routinely lies about the rendered box. The MCP server is pinned to a 360×800 viewport by default.
+
+**Consequence:** this also closes the M1 gap where FR-7's browser-level `crossOriginIsolated`
+assertion was deferred — Playwright MCP can make it directly once there is a page worth driving.
+
 ---
 
 ## Open — need a decision from the user

@@ -44,7 +44,12 @@ done. It refutes; it never fixes.
 `/story US-XX` — implement a story with its acceptance criteria as the definition of done ·
 `/fairplay-check` — the NFR-L1/L2/L3 gate, required on any diff touching analysis, import, deps, or
 assets · `/spec-check` — full PRD compliance audit of a diff · `/progress` — read or update the
-tracker (reconciles it against the actual repo).
+tracker (reconciles it against the actual repo) · `/skeletons` — **mandatory before writing any
+loading state**: pixel-stable skeleton→content swaps, measured at 360 px with the Playwright MCP.
+
+**The UI is mobile-first.** 360 px is the first viewport built and verified, not the last; base
+classes target narrow screens and `sm:`/`md:`/`lg:` widen. Loading states are paired skeletons, not
+spinners, and are verified by measurement (CLS ≤ 0.05) rather than by reading class names.
 
 ## Phasing
 
@@ -78,6 +83,10 @@ run it against a Worker or a deployed URL instead) · `npm run preview` — the 
   bootstrap, UCI options, Lichess export params, and chess.com PubAPI headers all have
   version-specific details that memory gets wrong. `resolve-library-id` → `get-library-docs` before
   writing integration code.
+- **playwright** — real-browser verification, **defaulted to a 360×800 viewport** because this is a
+  mobile-first product (US-G1). Every UI change is measured here, not reasoned about: layout at
+  360 px, skeleton↔content `getBoundingClientRect()` parity, and `crossOriginIsolated` in an actual
+  browser. Widen the viewport explicitly when checking `sm:`/`md:`/`lg:`.
 
 Add a server by editing `.mcp.json` (project scope, committed, **never secrets** — use
 `${ENV_VAR}` interpolation). Candidates as the project grows: Postgres (read-only) once P1 lands,
