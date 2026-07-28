@@ -46,11 +46,23 @@ export const MOMENT_TEXT_BLOCK = "flex-1 min-w-0 flex flex-col gap-1";
  * The summary box height is load-bearing for NFR-R1.
  *
  * The "AI summary pending" degradation state renders in *this same box*. If the
- * box grows when real text arrives, the degradation path causes a layout shift
- * every time the provider recovers.
+ * box grows when real text arrives, the degradation path shifts the page every
+ * time the provider recovers.
+ *
+ * **18.5rem is measured, not guessed**: a 250-word summary (the US-D1 cap) in
+ * three paragraphs renders at ~295px on a 360px viewport. An earlier value of
+ * 11rem under-reserved by 83px, which the Playwright parity test caught. If the
+ * word cap changes, re-measure rather than adjusting by eye.
  */
 export const SUMMARY_BOX =
-  "rounded-lg border border-black/10 dark:border-white/15 p-4 min-h-[11rem]";
+  "rounded-lg border border-black/10 dark:border-white/15 p-4 min-h-[18.5rem]";
+
+/** Paragraph-shaped line groups for the summary skeleton, matching the above. */
+export const SUMMARY_SKELETON_PARAGRAPHS: readonly (readonly string[])[] = [
+  ["w-full", "w-11/12"],
+  ["w-full", "w-full", "w-full", "w-4/5"],
+  ["w-full", "w-full", "w-3/5"],
+];
 
 export const SECTION = "flex flex-col gap-3";
 export const SECTION_HEADING = "text-sm font-semibold tracking-tight";
