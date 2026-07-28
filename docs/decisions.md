@@ -170,6 +170,46 @@ a threshold or a prompt version in the TS code.
 report, the grounding validator as a hard gate, per-report cost telemetry, cheap model by default
 with a premium tier behind a flag (FR-8), and the engine-only degradation path (NFR-R1).
 
+### D-10 · 2026-07-29 · Email + password auth alongside OAuth; PBKDF2 at 600k; DB-backed throttling
+
+**Decision.** Accounts may hold a password as well as, or instead of, a Lichess link. Hashing is
+PBKDF2-HMAC-SHA-256 at 600,000 iterations via `crypto.subtle`. Failed-attempt throttling lives in
+the database, not in memory. Sessions stay opaque server-side rows and gain user-visible
+management.
+
+**Why a second credential type at all.** OAuth-only meant no account could exist before a platform
+link, which forces the Lichess consent screen in front of anyone who just wants to look around,
+and leaves nothing to attach a future chess.com-only user to (US-A3 has no OAuth to offer).
+
+**Why PBKDF2, not bcrypt or argon2.** Workers has no native module loader, so both are simply
+unavailable; the pure-JS ports burn our CPU budget without argon2's memory hardness. PBKDF2 via
+`crypto.subtle` is implemented natively by the runtime.
+
+**Why 600,000 iterations** — OWASP's current floor, and the cost was measured rather than assumed:
+100k → 19 ms, 210k → 25 ms, 600k → 72 ms (Node 22, Apple Silicon). The Workers free-tier 10 ms CPU
+limit is exceeded by all three, including counts too weak to be worth having, so it argues for
+none of them. The cost parameter is stored inside each hash, so raising it later is a config change
+plus opportunistic re-hash on sign-in, not a flag-day migration.
+
+**Why the throttle is in the database.** `MemoryRateLimitStore` is documented as "correct for one
+process, wrong for a fleet". For demo-report quota that means a few extra reports; for password
+attempts it means an attacker gets a fresh allowance from every Worker isolate they land on, which
+is indistinguishable from having no throttle.
+
+**Consequences.**
+
+- `users.lichess_id` is nullable; a CHECK guarantees every account keeps at least one way to sign
+  in, and that a password never exists without an address.
+- `migrate()` needed a `schema_migrations` ledger — 0002 rebuilds `users` and is destructive if
+  repeated, unlike 0001 which was pure `IF NOT EXISTS`.
+- Cookie `Secure` now follows the request protocol, not `NODE_ENV`. Loopback is the only exemption,
+  so a proxy that drops `X-Forwarded-Proto` cannot downgrade a real deployment.
+- **Password reset is not built.** It needs an email sender, which does not exist yet. A
+  password-login product without reset is a support burden, so this is a launch blocker, not a
+  nice-to-have — recorded as such in `progress.md`.
+
+---
+
 ---
 
 ## Open — need a decision from the user
