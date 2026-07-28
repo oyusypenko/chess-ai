@@ -1,0 +1,21 @@
+# Dependencies & build
+node_modules/
+.next/
+dist/
+out/
+coverage/
+
+# Environment & secrets — also deny-listed in .claude/settings.json
+.env
+.env.*
+!.env.example
+secrets/
+*.pem
+*.key
+
+# Claude Code personal overrides (team config in .claude/ is committed)
+.claude/settings.local.json
+CLAUDE.local.md
+
+# OS / editor
+.DS_Store
