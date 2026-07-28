@@ -120,18 +120,69 @@ summary), which is precisely the burst pattern CLS scoring punishes hardest.
 **Consequence:** this also closes the M1 gap where FR-7's browser-level `crossOriginIsolated`
 assertion was deferred — Playwright MCP can make it directly once there is a page worth driving.
 
+### D-09 · 2026-07-28 · One TypeScript service; no Python service, no RAG, no agent loop
+
+**Status:** provisional — needs user sign-off
+**Question raised:** should the LLM layer be a separate Python service, and how do RAG / evals /
+agents fit?
+
+**Decision: keep the request path entirely in TypeScript. Python is allowed only for offline work
+that never serves a request.**
+
+**Why not a Python service.** The runtime LLM work here is _one_ HTTP call with a JSON body — the
+Anthropic TS SDK covers it completely, and no Python-only capability is involved. Meanwhile the
+genuinely hard part of M6, the **grounding validator**, is chess logic: parse the model's SAN,
+check legality in the actual position, compare against engine PVs. That needs `chess.js`, which is
+already our source of truth for move legality (D-01). Re-implementing it with `python-chess` would
+give us **two chess engines that can disagree**, on precisely the component whose entire job is
+being right. A second service also means a second deploy target on Cloudflare, cross-service
+latency inside a ≤ 60 s p75 budget (NFR-P2), and a distributed system built for a single API call.
+
+**Why no RAG.** Our core principle is engine-first: the LLM narrates structured engine output and
+never evaluates (US-D1). **The engine _is_ the retrieval step** — it produces the facts, they are
+exact, and they are already in the prompt. There is no corpus whose absence causes a wrong answer.
+Adding a vector store would introduce a second, fuzzier source of "truth" into a pipeline whose
+defining constraint is that every claim be verifiable against the game. For motif explanations
+(P2), a **curated deterministic map** (motif tag → vetted explanation) beats retrieval: free,
+instant, no hallucination surface, and reviewable by a coach. Revisit only if a genuine corpus
+appears (annotated master games for study recommendations, US-D3 extended).
+
+**Why no agent loop.** Agentic loops earn their cost on open-ended, hard-to-specify tasks. Report
+generation is a single well-specified transformation with a deterministic validator behind it. An
+agent would add latency, nondeterminism, and unbounded token spend to something budgeted at
+**≤ $0.02 per report** and required to be reproducible (`promptVersion` + `model` stored per
+report, FR-4). The architecture deliberately denies the model agency; that is the safety property,
+not a limitation to route around.
+
+**Where Python _is_ the right tool — offline only, under `tools/`:**
+
+- **Eval harness**: golden set of games → generate reports → score grounding, length, tone-by-
+  rating-band, and cost. This is batch analysis, and the Python data stack is genuinely better at
+  it. It reads the same fixture games the TS suite uses.
+- Prompt/model experimentation and A/B scoring; threshold tuning for the classifier (M4) via
+  statistical analysis over many games.
+
+The rule that keeps this honest: **nothing under `tools/` may be imported by the app, and nothing
+in the request path may call it.** If an eval finding needs to change runtime behaviour, it changes
+a threshold or a prompt version in the TS code.
+
+**Runtime LLM ops we _do_ build (M6):** provider abstraction (FR-4), prompt versioning stored per
+report, the grounding validator as a hard gate, per-report cost telemetry, cheap model by default
+with a premium tier behind a flag (FR-8), and the engine-only degradation path (NFR-R1).
+
 ---
 
 ## Open — need a decision from the user
 
 These block work at the milestone named. Recorded here so they aren't silently assumed.
 
-| #   | Question                                          | Blocks                                                | Recommendation                                                                                                                                                         | Source            |
-| --- | ------------------------------------------------- | ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
-| O-8 | EU data residency on Cloudflare (NFR-PR1)         | P1 (before storing personal data)                     | Investigate R2/D1 jurisdiction hints and the Data Localization Suite. Cloudflare is a global edge network — residency is a configuration exercise, not a region picker | D-05              |
-| O-2 | Brand name + domain                               | OAuth app registration, chess.com `User-Agent` string | —                                                                                                                                                                      | PRD Q5            |
-| O-3 | Default LLM provider + model                      | M6                                                    | Claude Haiku 4.5 (~$0.01/report, inside the $0.02 budget); premium tier Sonnet 5 behind a flag. Needs an EU DPA check (NFR-PR1)                                        | PRD Q3, plan §1.5 |
-| O-4 | P0 scope: Lichess-only or chess.com from day one? | M2                                                    | Lichess-only — chess.com needs the backend proxy (FR-1) earlier and adds no validation signal                                                                          | PRD Q6            |
-| O-5 | Billing: Paddle vs Stripe                         | P1 / US-F2                                            | Paddle — merchant-of-record offloads EU VAT                                                                                                                            | PRD Q1            |
-| O-6 | Pricing point and annual discount                 | P1 / US-F2                                            | Placeholder $6.99/mo, $49/yr per PRD                                                                                                                                   | PRD Q2            |
-| O-7 | Is engine-only analysis truly unlimited on free?  | P1 / US-F1                                            | —                                                                                                                                                                      | PRD Q4            |
+| #   | Question                                                                     | Blocks                                                | Recommendation                                                                                                                                                                                                     | Source            |
+| --- | ---------------------------------------------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------- |
+| O-9 | Sign off D-09: one TypeScript service, no Python service / RAG / agent loop? | M6 architecture                                       | Yes — the engine is the retrieval step, and splitting chess logic across two languages risks two implementations disagreeing on the grounding validator. Python stays for the offline eval harness under `tools/`. | D-09              |
+| O-8 | EU data residency on Cloudflare (NFR-PR1)                                    | P1 (before storing personal data)                     | Investigate R2/D1 jurisdiction hints and the Data Localization Suite. Cloudflare is a global edge network — residency is a configuration exercise, not a region picker                                             | D-05              |
+| O-2 | Brand name + domain                                                          | OAuth app registration, chess.com `User-Agent` string | —                                                                                                                                                                                                                  | PRD Q5            |
+| O-3 | Default LLM provider + model                                                 | M6                                                    | Claude Haiku 4.5 (~$0.01/report, inside the $0.02 budget); premium tier Sonnet 5 behind a flag. Needs an EU DPA check (NFR-PR1)                                                                                    | PRD Q3, plan §1.5 |
+| O-4 | P0 scope: Lichess-only or chess.com from day one?                            | M2                                                    | Lichess-only — chess.com needs the backend proxy (FR-1) earlier and adds no validation signal                                                                                                                      | PRD Q6            |
+| O-5 | Billing: Paddle vs Stripe                                                    | P1 / US-F2                                            | Paddle — merchant-of-record offloads EU VAT                                                                                                                                                                        | PRD Q1            |
+| O-6 | Pricing point and annual discount                                            | P1 / US-F2                                            | Placeholder $6.99/mo, $49/yr per PRD                                                                                                                                                                               | PRD Q2            |
+| O-7 | Is engine-only analysis truly unlimited on free?                             | P1 / US-F1                                            | —                                                                                                                                                                                                                  | PRD Q4            |
