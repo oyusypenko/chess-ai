@@ -1,0 +1,55 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Never deploy two revisions concurrently — the second would race the first.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Cloudflare Workers
+    runs-on: ubuntu-latest
+    # Skips silently on forks and until the secret is configured, so the
+    # workflow does not fail red on a repo that has not been wired to an
+    # account yet.
+    if: github.repository_owner != '' && github.event_name != 'pull_request'
+    environment: production
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Check deploy credentials
+        id: creds
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "No CLOUDFLARE_API_TOKEN configured — skipping deploy."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Deploy
+        if: steps.creds.outputs.configured == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npm run deploy
+
+      - name: Verify isolation headers on the deployed site (FR-7)
+        if: steps.creds.outputs.configured == 'true' && vars.PRODUCTION_URL != ''
+        env:
+          SMOKE_BASE_URL: ${{ vars.PRODUCTION_URL }}
+        run: npm run test:headers

@@ -25,7 +25,7 @@ banned and the product delisted, rule 3 forces us to open-source our codebase, r
 - [ ] Imported games are verified **finished** before entering the analysis pipeline.
 - [ ] No UI, extension, notification, or API surface could deliver evals, best moves, or
       classifications to a user while they have a live game running.
-- [ ] Nothing in the diff makes a future live-game feature *easier* by leaving a hook for it.
+- [ ] Nothing in the diff makes a future live-game feature _easier_ by leaving a hook for it.
 
 There is no override for this section. If it fails, the change does not merge.
 

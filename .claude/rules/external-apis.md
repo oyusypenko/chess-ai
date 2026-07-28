@@ -41,5 +41,5 @@ Design refs: FR-1, FR-2, US-A1, US-A2, US-A3, US-B1, US-B2, NFR-R2, NFR-S2 · pl
 - **Validate every external identifier server-side** — usernames, game IDs — before use (NFR-S2).
 - **Outages produce designed states, never blank screens** (NFR-R2). Enumerate the failure modes
   for each client: unknown user, zero games, 429, 5xx, malformed PGN, network timeout.
-- Rate limits and quotas that protect *us* (3 demo reports per IP per day, free-tier caps) are
+- Rate limits and quotas that protect _us_ (3 demo reports per IP per day, free-tier caps) are
   enforced server-side in Redis, not in the client (US-A1, US-F1).

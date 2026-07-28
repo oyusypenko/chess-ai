@@ -14,7 +14,7 @@ recurring weaknesses across games in a dashboard.
 
 ## Why
 
-Free engine analysis already exists and is excellent. What it doesn't do is *explain*. A 1200-rated
+Free engine analysis already exists and is excellent. What it doesn't do is _explain_. A 1200-rated
 player looking at `23. Nf5!! +1.7` learns nothing: they can see the eval jumped, not why the move
 worked or what pattern they missed. ChessCoach AI turns engine output into an explanation, and
 turns explanations across many games into a picture of what to actually practice.
@@ -54,41 +54,53 @@ classifier is a clean-room implementation. See [`docs/attribution.md`](docs/attr
 
 ## Documentation
 
-| Document | What it covers |
-|---|---|
-| [`docs/prd.md`](docs/prd.md) | Product requirements — user stories (`US-*`), functional (`FR-*`) and non-functional (`NFR-*`) requirements. The authority doc. |
-| [`docs/implementation-plan.md`](docs/implementation-plan.md) | Library research with sources, stack proposal, milestones M1–M7, risks |
-| [`docs/progress.md`](docs/progress.md) | Current state — the single tracker |
-| [`docs/decisions.md`](docs/decisions.md) | Numbered decision log and open questions |
-| [`docs/attribution.md`](docs/attribution.md) | Third-party licences and the GPLv3 source offer |
-| [`CLAUDE.md`](CLAUDE.md) | Map of the codebase and its conventions |
+| Document                                                     | What it covers                                                                                                                  |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| [`docs/prd.md`](docs/prd.md)                                 | Product requirements — user stories (`US-*`), functional (`FR-*`) and non-functional (`NFR-*`) requirements. The authority doc. |
+| [`docs/implementation-plan.md`](docs/implementation-plan.md) | Library research with sources, stack proposal, milestones M1–M7, risks                                                          |
+| [`docs/progress.md`](docs/progress.md)                       | Current state — the single tracker                                                                                              |
+| [`docs/decisions.md`](docs/decisions.md)                     | Numbered decision log and open questions                                                                                        |
+| [`docs/attribution.md`](docs/attribution.md)                 | Third-party licences and the GPLv3 source offer                                                                                 |
+| [`CLAUDE.md`](CLAUDE.md)                                     | Map of the codebase and its conventions                                                                                         |
 
 ## Planned stack
 
-Next.js (App Router) + TypeScript as a single app; Stockfish NNUE WASM
+Next.js 16 (App Router) + TypeScript as a single app, deployed to **Cloudflare Workers** via
+[OpenNext](https://opennext.js.org/cloudflare); Stockfish NNUE WASM
 ([`@lichess-org/stockfish-web`](https://github.com/lichess-org/stockfish-web)) in a Web Worker;
-`chess.js` + `react-chessboard`; IndexedDB for the analysis cache; Redis for rate limits; Postgres
-from P1. Provider-agnostic LLM layer.
+`chess.js` + `react-chessboard`; Tailwind v4; IndexedDB for the analysis cache. Provider-agnostic
+LLM layer.
 
-Multithreaded WASM requires cross-origin isolation, so the app ships `COOP`/`COEP` headers with an
-automated test asserting `crossOriginIsolated === true` — and a single-threaded fallback for
-browsers where threads aren't available.
-
-Stack sign-off is still open ([`docs/decisions.md`](docs/decisions.md) O-1).
+Multithreaded WASM requires cross-origin isolation, so the app ships `COOP`/`COEP` headers — in
+`next.config.ts` for Worker-rendered responses and `public/_headers` for Cloudflare's static-asset
+layer — with a smoke test that asserts them against both. Browsers without threads get a
+single-threaded fallback rather than an error.
 
 ## Roadmap
 
-| Phase | Scope |
-|---|---|
+| Phase  | Scope                                                                                  |
+| ------ | -------------------------------------------------------------------------------------- |
 | **P0** | Validation demo — enter a Lichess username, get one full AI-coached report, no account |
-| **P1** | MVP — Lichess OAuth, game list, weakness dashboard, free/paid tiers |
-| **P2** | chess.com import, study recommendations, share links |
-| **P3** | Coach/club dashboard, drills |
+| **P1** | MVP — Lichess OAuth, game list, weakness dashboard, free/paid tiers                    |
+| **P2** | chess.com import, study recommendations, share links                                   |
+| **P3** | Coach/club dashboard, drills                                                           |
 
 ## Development
 
-Nothing is scaffolded yet. From M1 onward: `npm run dev` · `npm run typecheck` · `npm run lint` ·
-`npm test`.
+```bash
+npm install
+npm run dev          # http://localhost:3000
+npm run validate     # typecheck + lint + format + unit tests (the local CI mirror)
+npm run preview      # build and run the real Cloudflare Worker locally
+```
+
+Verifying cross-origin isolation (FR-7) needs a build first:
+
+```bash
+npm run build && npm run test:headers
+# or against any running target, including a deployment:
+SMOKE_BASE_URL=https://example.workers.dev npm run test:headers
+```
 
 This repo is set up for [Claude Code](https://claude.com/claude-code). `CLAUDE.md` and everything
 under `.claude/` is committed so contributors run the same rules, agents, and checks:

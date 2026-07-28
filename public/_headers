@@ -1,0 +1,17 @@
+# Cloudflare static-asset headers (FR-7) — defense in depth.
+#
+# next.config.ts already sets these for everything the Worker renders. This
+# file covers the other path: assets served directly by Cloudflare's asset
+# layer, which can bypass the Worker entirely. Cross-origin isolation is a
+# property of the *document*, so a document served from the asset layer without
+# these headers would silently drop the engine to single-threaded (US-C1).
+#
+# Keep in sync with CROSS_ORIGIN_ISOLATION_HEADERS in next.config.ts.
+# Verified by: npm run test:headers
+
+/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: origin-when-cross-origin
+  X-Frame-Options: SAMEORIGIN

@@ -1,0 +1,23 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "chess-ai",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-07-28",
+  // nodejs_compat: required by the Next.js server running inside the Worker.
+  // global_fetch_strictly_public: required by OpenNext so fetch() to our own
+  // origin goes back through the public edge rather than short-circuiting.
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS",
+  },
+  "services": [
+    {
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "chess-ai",
+    },
+  ],
+  "observability": {
+    "enabled": true,
+  },
+}

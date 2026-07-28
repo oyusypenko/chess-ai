@@ -36,6 +36,7 @@ milestone)`. "Done" requires verification — a passing test, a working page, a 
 that exists but was never run is `in progress`.
 
 Also update when:
+
 - A blocker appears or clears — name it and who/what unblocks it.
 - An open question gets answered — the answer goes to `docs/decisions.md`; the tracker links it.
 - Scope changes — note what moved and why, don't silently rewrite history.

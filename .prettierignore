@@ -1,0 +1,7 @@
+.next/
+.open-next/
+.wrangler/
+node_modules/
+package-lock.json
+cloudflare-env.d.ts
+docs/prd.md

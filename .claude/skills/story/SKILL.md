@@ -41,12 +41,12 @@ invent scope the PRD doesn't ask for.
 
 ## 4. Route to the owning agent
 
-| Story touches | Agent |
-|---|---|
-| Engine, worker, analysis budgets, classifier, fixtures | `chess-engine` |
-| Route handlers, Lichess/chess.com clients, LLM, grounding validator, limits, auth | `chess-backend` |
-| Pages, board, move list, eval graph, badges, dashboard, headers, i18n, a11y | `chess-frontend` |
-| Docs ambiguity, cross-cutting decision, `.claude/` assets | `chess-architect` |
+| Story touches                                                                     | Agent             |
+| --------------------------------------------------------------------------------- | ----------------- |
+| Engine, worker, analysis budgets, classifier, fixtures                            | `chess-engine`    |
+| Route handlers, Lichess/chess.com clients, LLM, grounding validator, limits, auth | `chess-backend`   |
+| Pages, board, move list, eval graph, badges, dashboard, headers, i18n, a11y       | `chess-frontend`  |
+| Docs ambiguity, cross-cutting decision, `.claude/` assets                         | `chess-architect` |
 
 A story spanning two areas is split along that boundary — each agent owns its side; don't let one
 agent write another's files.
@@ -60,7 +60,7 @@ memory.
 
 ## 6. Verify
 
-Check each AC against running code or a passing test, and record *how* it was verified. An AC that
+Check each AC against running code or a passing test, and record _how_ it was verified. An AC that
 can't be verified yet because it needs later-milestone infra is reported as **deferred** with the
 milestone named — never silently skipped, never marked done.
 

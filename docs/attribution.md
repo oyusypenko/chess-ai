@@ -39,10 +39,10 @@ mobile app — requires legal review **before** commitment.
 
 ## Chess logic & UI libraries
 
-| Package | Licence | Why it's safe to bundle |
-|---|---|---|
-| `chess.js` | BSD-2-Clause | Permissive — move generation, SAN/FEN, PGN parsing |
-| `react-chessboard` | MIT | Permissive — board rendering |
+| Package            | Licence      | Why it's safe to bundle                            |
+| ------------------ | ------------ | -------------------------------------------------- |
+| `chess.js`         | BSD-2-Clause | Permissive — move generation, SAN/FEN, PGN parsing |
+| `react-chessboard` | MIT          | Permissive — board rendering                       |
 
 **Explicitly excluded** (see `docs/decisions.md` D-01): `chessground` and `chessops` are
 **GPL-3.0**; bundling either would relicense our frontend. Blocked at write time by
@@ -56,9 +56,28 @@ approaches including the open-source WintrChess/freechess project (GPL-3.0). **N
 from it.** Our category names, thresholds, and icon set are original (NFR-L2 — nothing derived from
 chess.com's glyph designs or badge branding).
 
+## Dependency licence audit
+
+Last run **2026-07-28** (M1), via `license-checker-rseidelsohn --production` over 856 resolved
+packages. Everything is permissive except the three below, each checked individually:
+
+| Package                           | Licence           | Verdict                                                                                                                                                                                                                                                                                                                |
+| --------------------------------- | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@img/sharp-libvips-darwin-arm64` | LGPL-3.0-or-later | **Not shipped.** Native libvips binary behind `sharp`, pulled in as an optional platform dep (and as a dev dep via miniflare). Verified absent from the deployed Worker: 0 references in `.open-next/worker.js`, no `.node`/libvips artifacts in the bundle. LGPL also permits dynamic linking without copyleft reach. |
+| `caniuse-lite`                    | CC-BY-4.0         | **Build-time data, not code.** A browser-support database consumed by browserslist during the build. Attribution satisfied by this entry.                                                                                                                                                                              |
+| `chess-ai` (this package)         | UNLICENSED        | **Us.** `"private": true` with no `license` field — matches the all-rights-reserved posture in the README. Revisit if a licence is chosen.                                                                                                                                                                             |
+
+**No GPL-3.0 packages are present**, directly or transitively — `chessground` and `chessops` are
+absent from `package.json` and from the lockfile (D-01, NFR-L3). This is enforced three ways: the
+Claude Code write-time hook, the CI `guardrails` job, and `/fairplay-check` §3.
+
+Re-run this audit whenever `package.json` changes.
+
 ## Fonts, icons, and other assets
 
 _TBD — one row per asset: file, source, licence, attribution text required._
+Currently none: the M1 scaffold ships no fonts or icon sets, and the default Next.js SVGs were not
+copied in.
 
 ---
 

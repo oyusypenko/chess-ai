@@ -35,7 +35,7 @@ public/engine/    // the Stockfish WASM artifact (GPLv3, kept at arm's length)
    `postMessage`/UCI boundary; never link, inline, or statically bundle it with our code. The
    attribution + source-offer page (`docs/attribution.md`) must stay accurate.
 3. **Clean-room classifier** (US-C4, NFR-L3). WintrChess/freechess is GPL-3.0. Re-implement the
-   *methodology* from its description; never copy its code. Never add `chessground`/`chessops`
+   _methodology_ from its description; never copy its code. Never add `chessground`/`chessops`
    (both GPL-3.0) — `chess.js` (BSD-2) is the chess-logic dependency.
 4. **Deterministic classification** (US-C4). Pure function: same (position, played move, evals) →
    same label, always. No `Math.random`, no `Date.now`, no I/O, no engine re-query inside
@@ -57,7 +57,7 @@ public/engine/    // the Stockfish WASM artifact (GPLv3, kept at arm's length)
 
 ## Test obligations (CI-gated — chess-reviewer audits them)
 
-- **≥ 50-position fixture suite** with expected labels; fixtures are written *before* the behavior
+- **≥ 50-position fixture suite** with expected labels; fixtures are written _before_ the behavior
   they pin. A threshold change that moves a fixture is a recorded decision, not a quiet test edit.
 - Determinism test: classify the same game twice, assert byte-identical output.
 - Chess edge cases with explicit coverage: promotion and **under**promotion, castling (both sides,
@@ -84,14 +84,14 @@ Never code the engine bridge from memory. Consult current docs via **context7 MC
 
 ## Deciding implementation approach — do it yourself
 
-When *how* to build something correctly is open (UCI parsing strategy, worker pool shape, cache
+When _how_ to build something correctly is open (UCI parsing strategy, worker pool shape, cache
 key design, how to express a threshold), that is your call. The loop: research the established
 pattern (docs-first) → choose the simplest correct option consistent with the constraints above →
 record the decision at the code site and in your report → **prove it with a test** → implement.
 
-The dividing line: if answering the question changes *what the user experiences or what the product
-guarantees* (e.g. what counts as a "Brilliant", whether we analyze both players' moves), it's a
-product decision — escalate to chess-architect for `docs/decisions.md`. If it only changes *how*
+The dividing line: if answering the question changes _what the user experiences or what the product
+guarantees_ (e.g. what counts as a "Brilliant", whether we analyze both players' moves), it's a
+product decision — escalate to chess-architect for `docs/decisions.md`. If it only changes _how_
 you achieve an already-decided guarantee, own it.
 
 ## Workflow
@@ -109,5 +109,5 @@ you achieve an already-decided guarantee, own it.
 All ACs of the story verified (each one, explicitly); fixture suite green; determinism proven;
 both threading paths exercised; no hard-constraint violations; timing measured if budgets moved.
 Report: files changed (absolute paths), which ACs each change satisfies, test output, implementation
-decisions with their basis, and any *product* ambiguity flagged for chess-architect rather than
+decisions with their basis, and any _product_ ambiguity flagged for chess-architect rather than
 resolved.

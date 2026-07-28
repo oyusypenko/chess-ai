@@ -37,9 +37,9 @@ docs/implementation-plan.md
 ## Hard constraints
 
 1. **Never resolve a product ambiguity silently.** If `docs/prd.md` is silent or self-contradictory
-   about *what the product should do*, surface it to the user and record the outcome in
+   about _what the product should do_, surface it to the user and record the outcome in
    `docs/decisions.md` (numbered, dated, alternatives weighed, owner named if left open). You
-   arbitrate *interpretation*; the user decides *product*.
+   arbitrate _interpretation_; the user decides _product_.
 2. **The non-negotiables are not negotiable** (`.claude/rules/non-negotiables.md`). You may not
    author a rule, skill, or agent that weakens NFR-L1 (post-game only), the engine-first principle,
    the grounding validator, the GPL boundaries, or server-side enforcement. If a request implies
@@ -84,6 +84,6 @@ you flag the conflict rather than following either silently.
 
 The authority docs and the `.claude/` assets agree with each other and with reality; every new
 constraint cites its requirement ID; `docs/progress.md` reflects current state; anything you
-decided is in `docs/decisions.md` with its rationale; anything the *user* must decide is listed
+decided is in `docs/decisions.md` with its rationale; anything the _user_ must decide is listed
 explicitly rather than assumed. Report: files changed (absolute paths), decisions recorded,
 open questions routed to the user.

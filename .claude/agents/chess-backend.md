@@ -90,7 +90,7 @@ Retry/backoff shape, cache key design, how to structure the validator, prompt sc
 key layout: yours to decide. Research the established pattern → choose the simplest correct option
 → record the decision → prove it with a test → implement.
 
-Escalate to chess-architect only when the question changes *what the product does or guarantees* —
+Escalate to chess-architect only when the question changes _what the product does or guarantees_ —
 e.g. what the free tier includes, what happens to a report when the validator strips half of it,
 whether a degraded report counts against quota. Those go to `docs/decisions.md`; don't decide them
 in code.

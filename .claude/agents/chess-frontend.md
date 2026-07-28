@@ -88,7 +88,7 @@ Component decomposition, state shape, how to render arrows, how the eval graph m
 animation choices: yours. Research the established pattern → pick the simplest correct option →
 record it → verify (including at 360 px and by keyboard) → implement.
 
-Escalate to chess-architect when the question changes *what the product shows or promises* — what
+Escalate to chess-architect when the question changes _what the product shows or promises_ — what
 counts as a "key moment", what the demo funnel asks for, how much of a report a free user sees.
 
 ## Definition of done

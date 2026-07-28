@@ -29,12 +29,12 @@ IP, server-side enforcement — are in `.claude/rules/non-negotiables.md`, alway
 
 ## Map
 
-| Path | What it is | Owner agent |
-|---|---|---|
-| `src/engine/`, `src/analysis/`, `src/classifier/` | Stockfish WASM in a Worker, UCI bridge, budgets, eval cache, deterministic classifier + fixtures | chess-engine |
-| `src/app/api/`, `src/lichess/`, `src/chesscom/`, `src/llm/`, `src/report/`, `src/server/` | Route handlers, external clients, LLM abstraction + grounding validator, limits/quotas | chess-backend |
-| `src/app/` (pages), `src/components/`, `src/features/`, `next.config.*` | Board, move list, eval graph, key moments, dashboard, COOP/COEP headers, i18n, a11y | chess-frontend |
-| `docs/`, `.claude/` | Authority docs, decision log, tracker, and the project's own scaffolding | chess-architect |
+| Path                                                                                      | What it is                                                                                       | Owner agent     |
+| ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | --------------- |
+| `src/engine/`, `src/analysis/`, `src/classifier/`                                         | Stockfish WASM in a Worker, UCI bridge, budgets, eval cache, deterministic classifier + fixtures | chess-engine    |
+| `src/app/api/`, `src/lichess/`, `src/chesscom/`, `src/llm/`, `src/report/`, `src/server/` | Route handlers, external clients, LLM abstraction + grounding validator, limits/quotas           | chess-backend   |
+| `src/app/` (pages), `src/components/`, `src/features/`, `next.config.*`                   | Board, move list, eval graph, key moments, dashboard, COOP/COEP headers, i18n, a11y              | chess-frontend  |
+| `docs/`, `.claude/`                                                                       | Authority docs, decision log, tracker, and the project's own scaffolding                         | chess-architect |
 
 **chess-reviewer** is adversarial and fresh-context — run it on the diff before declaring any story
 done. It refutes; it never fixes.
@@ -54,18 +54,23 @@ P0/P1 stories are open. Current state and the next milestone: `docs/progress.md`
 
 ## Stack
 
-Proposed in **plan §2** (Next.js App Router + TS, one app; `chess.js` + `react-chessboard`;
-Stockfish NNUE WASM in a Worker; Redis/Postgres; Vercel EU) — **awaiting sign-off**, see
-`docs/decisions.md` O-1. Read it there; it is not restated here.
+Next.js 16 App Router + TypeScript, one app; Tailwind v4; `chess.js` + `react-chessboard`;
+Stockfish NNUE WASM in a Worker. **Deployed to Cloudflare Workers via OpenNext** (D-05 — not
+Vercel). Signed off in `docs/decisions.md` D-07; rationale lives there, not here.
 
 One platform fact that binds every layer: **COOP/COEP** (`same-origin` / `require-corp`) must stay
-configured, because multithreaded WASM requires `crossOriginIsolated === true`. An automated smoke
-test asserts it (FR-7), and the single-threaded fallback must keep working (NFR-C1).
+configured, because multithreaded WASM requires `crossOriginIsolated === true`. On Cloudflare that
+is **two** paths — `next.config.ts` for what the Worker renders, `public/_headers` for assets
+served straight off the asset layer. Both are smoke-tested (FR-7); the single-threaded fallback
+must keep working (NFR-C1).
 
 ## Golden commands
 
-Nothing is scaffolded yet — M1 creates these. Planned: `npm run typecheck` · `npm run lint` ·
-`npm test` (Vitest; classifier fixtures are CI-gated) · `npm run build` · `npm run dev`.
+`npm run validate` — typecheck + lint + format + unit tests, the local CI mirror ·
+`npm run dev` · `npm run build` · `npm test` (Vitest) ·
+`npm run test:headers` — FR-7 smoke test (needs a prior `npm run build`; set `SMOKE_BASE_URL` to
+run it against a Worker or a deployed URL instead) · `npm run preview` — the real Worker locally ·
+`npm run deploy` — Cloudflare.
 
 ## MCP (`.mcp.json`, committed)
 

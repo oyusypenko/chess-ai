@@ -1,0 +1,108 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: typecheck · lint · format · test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Format check
+        run: npm run format:check
+
+      - name: Unit tests
+        run: npm test
+
+  smoke:
+    name: cross-origin isolation headers (FR-7)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Two layers, because they can fail independently:
+      #   1. next.config is correct        → `next start`
+      #   2. Cloudflare actually serves it → the real Worker under wrangler
+      # Without these headers SharedArrayBuffer is unavailable and multithreaded
+      # Stockfish silently degrades to single-threaded (US-C1, NFR-C1) — a
+      # regression with no error message, so it gates merge.
+      - name: Build (Next.js)
+        run: npm run build
+
+      - name: Assert headers from the Next.js server
+        run: npm run test:headers
+
+      - name: Build (OpenNext → Cloudflare Worker)
+        run: npx opennextjs-cloudflare build
+
+      - name: Assert headers from the Cloudflare Worker
+        run: |
+          npx wrangler dev --port 8788 --local > /tmp/wrangler.log 2>&1 &
+          for i in $(seq 1 45); do
+            sleep 2
+            curl -sf -o /dev/null http://127.0.0.1:8788 && break
+          done
+          SMOKE_BASE_URL=http://127.0.0.1:8788 npm run test:headers
+          pkill -f "wrangler dev" || true
+
+  guardrails:
+    name: project hard rules
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # Mirrors the Claude Code write-time hook so the rules hold for every
+      # contributor and every tool, not just one editor.
+      # NFR-L3: chessground/chessops are GPL-3.0 and would relicense our bundle.
+      - name: No GPL board libraries in dependencies
+        run: |
+          if grep -nE '"(chessground|chessops)"[[:space:]]*:' package.json; then
+            echo "::error::GPL-3.0 dependency found (chessground/chessops) — see NFR-L3 and docs/decisions.md D-01"
+            exit 1
+          fi
+          echo "OK: no GPL board libraries"
+
+      - name: No live-game analysis surfaces (NFR-L1)
+        run: |
+          if grep -rInE '\b(streamIncomingGame|boardStreamGameState|analyzeLiveGame|liveGameEval)\b' \
+              --include='*.ts' --include='*.tsx' src/ 2>/dev/null; then
+            echo "::error::live-game surface found — post-game analysis only (NFR-L1)"
+            exit 1
+          fi
+          echo "OK: no live-game surfaces"
+
+      - name: Cross-origin isolation headers still declared (FR-7)
+        run: |
+          for f in next.config.ts public/_headers; do
+            grep -q "Cross-Origin-Opener-Policy" "$f" && grep -q "Cross-Origin-Embedder-Policy" "$f" \
+              || { echo "::error::$f lost COOP/COEP — FR-7"; exit 1; }
+          done
+          echo "OK: COOP/COEP declared in next.config.ts and public/_headers"
