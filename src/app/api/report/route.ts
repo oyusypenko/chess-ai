@@ -5,6 +5,14 @@ import { buildReportPayload } from "@/report/build-payload";
 import { generateSummary, type SummaryResult } from "@/llm/generate-summary";
 import { LlmUnavailableError } from "@/llm/provider";
 import { createAnthropicProvider } from "@/llm/providers/anthropic";
+import { checkRateLimit, clientIdentifier, MemoryRateLimitStore } from "@/server/rate-limit";
+import { track } from "@/server/telemetry";
+
+/**
+ * Module-scoped store: correct for one instance, not for a Worker fleet.
+ * Swapped for Cloudflare KV/Durable Objects before real traffic (D-05).
+ */
+const rateLimitStore = new MemoryRateLimitStore();
 
 /**
  * `POST /api/report` — classified game in, coached summary out (US-D1, FR-4).
@@ -47,6 +55,33 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
 
   const { game, evals, bestLines } = body ?? {};
+
+  // US-A1: 3 AI-narrated reports per IP per day, enforced HERE because a
+  // client-side check is a suggestion. Engine-only analysis stays unmetered —
+  // it costs us nothing (US-F1).
+  const limit = await checkRateLimit(rateLimitStore, clientIdentifier(request), {
+    scope: "report",
+  });
+  if (!limit.allowed) {
+    track("rate_limited", { scope: "report" });
+    return NextResponse.json(
+      {
+        ok: false,
+        message: `You've used all ${limit.limit} free reviews for today. They reset at midnight UTC.`,
+        resetsAt: limit.resetsAt,
+      },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(
+            Math.max(1, Math.ceil((Date.parse(limit.resetsAt) - Date.now()) / 1000)),
+          ),
+          "X-RateLimit-Limit": String(limit.limit),
+          "X-RateLimit-Remaining": String(limit.remaining),
+        },
+      },
+    );
+  }
 
   // NFR-L1: the type says `finished: true`, but a request body is untrusted
   // input — the compiler cannot enforce it across the wire, so check.
@@ -98,12 +133,16 @@ export async function POST(request: Request): Promise<NextResponse> {
       promptVersion: result.promptVersion,
       model: result.model,
     };
+    track("summary_generated", { status: result.status, attempts: result.attempts });
     if (result.issues.length > 0) {
       console.warn(
         `[report] grounding issues game=${game.id} status=${result.status} tokens=${result.issues.map((i) => i.token).join(",")}`,
       );
     }
   } catch (error) {
+    track("summary_degraded", {
+      reason: error instanceof LlmUnavailableError ? "unavailable" : "unexpected",
+    });
     if (error instanceof LlmUnavailableError) {
       console.warn(`[report] LLM unavailable, degrading to engine-only: ${error.message}`);
     } else {
@@ -113,5 +152,12 @@ export async function POST(request: Request): Promise<NextResponse> {
     // renders (NFR-R1).
   }
 
-  return NextResponse.json({ ok: true, classification, summary } satisfies ReportResponse);
+  track("report_viewed", { moveCount: game.moves.length });
+
+  return NextResponse.json({ ok: true, classification, summary } satisfies ReportResponse, {
+    headers: {
+      "X-RateLimit-Limit": String(limit.limit),
+      "X-RateLimit-Remaining": String(limit.remaining),
+    },
+  });
 }

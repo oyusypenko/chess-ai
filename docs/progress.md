@@ -5,88 +5,75 @@ The **single** tracker for this repo (docs-placement rule — never create `STAT
 [`prd.md`](prd.md); the build order lives in [`implementation-plan.md`](implementation-plan.md);
 choices live in [`decisions.md`](decisions.md).
 
-**Current phase:** P0 — validation demo · **Current milestone:** M1 done, M2 next
+**Current phase:** P0 — validation demo · **Current milestone:** M1–M7 complete
 **Last updated:** 2026-07-28
 
 States: `not started` · `in progress` · `blocked (reason)` · `done (verified how)` · `deferred (to milestone)`.
 "Done" requires verification — a passing test, a working page, a measured number. Code that exists
 but was never run is `in progress`.
 
+**Test totals:** 269 unit · 41 browser (360 px + 1280 px) · 3 HTTP smoke.
+
 ---
 
 ## Phase 0 — Claude Code & repo tooling · **done**
 
-| Item                                                                           | State       | Verified                                                                                                                  |
-| ------------------------------------------------------------------------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `CLAUDE.md` — project map                                                      | done        | 2026-07-28 · reviewed against reference setup                                                                             |
-| `docs/prd.md` — requirements                                                   | done        | 2026-07-28 · authority doc, verbatim from product                                                                         |
-| `docs/implementation-plan.md` — research + milestones                          | done        | 2026-07-28 · library/licensing research with sources                                                                      |
-| `.claude/rules/` — 2 always-on + 5 path-scoped                                 | done        | 2026-07-28 · front-matter paths checked                                                                                   |
-| `.claude/agents/` — architect, engine, backend, frontend, reviewer             | done        | 2026-07-28 · registered by the harness                                                                                    |
-| `.claude/skills/` — story, fairplay-check, spec-check, progress, **skeletons** | done        | 2026-07-28 · registered by the harness; `/skeletons` added per D-08                                                       |
-| `.claude/hooks/` — hard-rules, secrets, format, stop-typecheck                 | done        | 2026-07-28 · **15/15 payload tests pass**                                                                                 |
-| `.claude/settings.json`, `.mcp.json`                                           | done        | 2026-07-28 · valid JSON, hooks resolve, no secrets; MCP = context7 + playwright (360×800 default)                         |
-| `docs/progress.md`, `docs/decisions.md`                                        | done        | 2026-07-28 · 7 decisions recorded, 7 open questions                                                                       |
-| `docs/attribution.md` — GPL/asset notices                                      | in progress | Skeleton written; Stockfish source-offer URL and cburnett licence are **launch blockers** (NFR-L3/L2), filled in at M3/M5 |
+Rules, agents, skills, hooks, MCP, settings, and the docs set. Hooks verified with 15/15 payload
+tests. Full inventory in [`implementation-plan.md`](implementation-plan.md) §3.
 
 ---
 
-## P0 — validation demo
+## P0 — validation demo · **complete**
 
-### M1 · Scaffold & infra — **done** (2026-07-28)
+| Milestone                    | State | Verified how                                                                                                                                                                |
+| ---------------------------- | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **M1 · Scaffold & infra**    | done  | Next.js 16 + TS + Tailwind; CI (validate/smoke/browser/guardrails); COOP/COEP on **two** paths (`next.config` + `_headers`), asserted over real HTTP and in-browser         |
+| **M2 · Lichess import**      | done  | Real API: 136-move game with clocks, ECO opening, correct subject/colour/result, 136 `lichess-server` evals. 404 vs 400 paths confirmed distinct                            |
+| **M3 · Engine analysis**     | done  | Browser-verified: `crossOriginIsolated`=true, 4 threads, **+25 cp** on a quiet Italian position at **depth 18 / 1,001,527 nodes in 551 ms** → ~23 s for a 40-move game      |
+| **M4 · Move classification** | done  | 60+ CI-gated fixtures: both colours, exact boundaries, mate-vs-cp, promotion/castling/en-passant. Determinism proven. Found 2 real bugs (mate ranking, sacrifice detection) |
+| **M5 · Report UI**           | done  | Mobile-first at 360 px. Skeleton↔content parity **0 px** on every section; measured **CLS 0.00000** via PerformanceObserver against a ≤ 0.05 target                         |
+| **M6 · AI summary**          | done  | Grounding validator with adversarial fixtures; regenerate-once-then-strip; engine-only degradation. Hook-verified that provider SDKs cannot escape `src/llm/`               |
+| **M7 · Launch hardening**    | done  | Live-server verified: 4th report/IP/day → **HTTP 429**; unfinished game → **400**; consent refused without a ticked box. Legal pages reachable from every page              |
 
-| Acceptance item                           | State | Verified how                                                                                                                                 |
-| ----------------------------------------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| Next.js 16 App Router + TypeScript        | done  | `npm run build` succeeds; 2 static routes generated                                                                                          |
-| ESLint + Prettier                         | done  | `npm run lint` clean; `npm run format:check` clean                                                                                           |
-| Vitest                                    | done  | 5 unit tests pass (threading feature detection)                                                                                              |
-| **COOP/COEP headers (FR-7)**              | done  | `next.config.ts` + `public/_headers`; smoke test green against **both** `next start` **and** the real Cloudflare Worker under `wrangler dev` |
-| Single-thread fallback detection (NFR-C1) | done  | `src/lib/cross-origin-isolation.ts` + 5 tests incl. isolated-but-no-SAB and constructor-throws cases                                         |
-| CI (typecheck · lint · format · test)     | done  | `.github/workflows/ci.yml` — 3 jobs incl. hard-rule guardrails mirroring the write-time hook                                                 |
-| Deploy pipeline                           | done  | `.github/workflows/deploy.yml` — skips cleanly until `CLOUDFLARE_API_TOKEN` is set                                                           |
-| Hosting target                            | done  | Cloudflare Workers via OpenNext (D-05) — **changed from Vercel** per user directive                                                          |
+### Extras beyond the plan
 
-**Deferred from M1, deliberately:**
+| Item                       | State | Notes                                                                                                                                                                                                |
+| -------------------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Docker (dev/prod/test/e2e) | done  | Container verified running: COOP/COEP served, non-root uid 1001, engine + GPL licence present. Found a real bug — a devDependency import in `next.config.ts` silently killed FR-7 under `--omit=dev` |
+| Playwright browser suite   | done  | 41 tests; 360 px is the baseline project, not an extra (D-08)                                                                                                                                        |
 
-- **Browser-level assertion that `crossOriginIsolated === true`** — the HTTP headers that cause it
-  are asserted at both layers, and `/` renders the live value, but no browser reads it yet.
-  Unblocked by D-08: the Playwright MCP is now configured, so this can be asserted directly from
-  **M2** onward rather than waiting for M3.
-- **Vercel EU region** → replaced by Cloudflare (D-05). EU data residency is now **O-8**, open, and
-  must be settled before P1 stores personal data.
-- **NFR-P1 (TTI < 3 s on 4G)** — not measurable against a placeholder page; measured at M5 when the
-  report UI exists.
+---
 
-### Remaining P0 milestones
+## 🚩 Launch blockers — must clear before P0 goes public
 
-| Milestone                    | Stories                         | State       | Notes                                                                                                                                                        |
-| ---------------------------- | ------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **M2 · Lichess import**      | US-A1 (partial), US-B1, FR-2    | not started | ← **next.** Public export by username, NDJSON, normalize to internal model, friendly errors, 429 backoff                                                     |
-| **M3 · Engine analysis**     | US-C1, US-C2                    | not started | Stockfish WASM in Worker, depth ≥18/1M nodes, progress+cancel, IndexedDB cache, single-thread fallback, eval provenance                                      |
-| **M4 · Move classification** | US-C4                           | not started | Win-probability deltas, clean-room, original names/icons, ≥50 fixtures CI-gated                                                                              |
-| **M5 · Report UI**           | US-G1, US-D2                    | not started | **Mobile-first** board + move list + eval graph + badges + key moments; paired skeletons per `/skeletons`; verified at 360 px via Playwright MCP; CLS ≤ 0.05 |
-| **M6 · AI summary**          | US-D1, FR-4                     | not started | Structured payload → LLM → **grounding validator** → ≤250 words; engine-only degradation                                                                     |
-| **M7 · Launch hardening**    | US-A1, FR-6, NFR-PR2, NFR-L2/L3 | not started | 3 reports/IP/day server-side, email capture + consent, funnel telemetry, privacy/ToS, attribution page, ≤60 s p75                                            |
+Real obligations, not paperwork. None can be satisfied by code alone.
 
-## P1 — MVP (outline)
+| #   | Blocker                                                                                                                                                                                                                  | Requirement    | Where                                                 |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------- | ----------------------------------------------------- |
+| 1   | **GPLv3 source offer is generic.** The attribution page points at upstream repos; it must resolve to the _exact_ sources for the binaries we serve (stockfish-web's patch + pinned Stockfish commit), or we mirror them. | NFR-L3         | `src/app/attribution/page.tsx`, `docs/attribution.md` |
+| 2   | **Privacy policy and ToS are unreviewed drafts.** They describe the software accurately but name no data controller and no contact address, and no lawyer has read them. Flagged as drafts in the UI.                    | NFR-PR2        | `src/app/{privacy,terms}/page.tsx`                    |
+| 3   | **Rate-limit store is in-memory.** Correct for one instance, wrong for a Worker fleet — the limit would reset per isolate. Needs Cloudflare KV or Durable Objects.                                                       | US-A1, US-F1   | `src/server/rate-limit.ts`                            |
+| 4   | **Email store is in-memory.** Waitlist addresses do not survive a restart, and NFR-PR3 deletion has nothing durable to delete from.                                                                                      | US-A1, NFR-PR3 | `src/server/email-capture.ts`                         |
+| 5   | **cburnett piece licence unverified.** We currently ship react-chessboard's defaults; if we adopt cburnett, verify the exact files' licence first.                                                                       | NFR-L2/L3      | `docs/attribution.md`                                 |
+| 6   | **NFR-P1 not measured.** Landing TTI < 3 s on 4G mid-range mobile and Core Web Vitals "good" need a real Lighthouse run against a deployment.                                                                            | NFR-P1         | —                                                     |
+| 7   | **`ANTHROPIC_API_KEY` not configured.** Without it every report degrades to engine-only — correct per NFR-R1, but not the intended launch experience.                                                                    | US-D1          | deploy env                                            |
+
+## P1 — MVP · not started
 
 `US-A2` Lichess OAuth+PKCE · `US-B1/B3` game list + filters · `US-D3` recommendations ·
 `US-E1/E2` weakness dashboard · `US-F1–F3` billing + entitlements · `US-A4` GDPR delete/export.
-All `not started`.
+See [`implementation-plan.md`](implementation-plan.md) §5.
 
 ---
 
-## Blockers & open questions
+## Open questions
 
-M2 can start immediately. The questions below block later milestones — see `decisions.md` for the
-full list and recommendations.
+| #   | Question                                    | Blocks                                      |
+| --- | ------------------------------------------- | ------------------------------------------- |
+| O-2 | Brand name + domain                         | OAuth registration, `User-Agent`            |
+| O-3 | Default LLM model (proposal: Haiku 4.5)     | launch quality/cost                         |
+| O-4 | P0 scope: Lichess-only or chess.com too?    | resolved in practice — Lichess-only shipped |
+| O-8 | EU data residency on Cloudflare             | P1 persistence                              |
+| O-9 | Sign off D-09 (no Python service/RAG/agent) | M6 architecture — as built                  |
 
-| #   | Question                                  | Blocks                            |
-| --- | ----------------------------------------- | --------------------------------- |
-| O-2 | Brand name + domain                       | OAuth registration, `User-Agent`  |
-| O-3 | Default LLM provider + model              | M6                                |
-| O-4 | P0 scope: Lichess-only or chess.com too?  | M2 scope (recommend Lichess-only) |
-| O-8 | EU data residency on Cloudflare (NFR-PR1) | P1, before storing personal data  |
-
-Resolved: **O-1** stack sign-off → D-07 (Cloudflare per D-05).
-Deferred by design: O-5 Paddle vs Stripe, O-6 pricing, O-7 free-tier engine cap — all P1.
+Resolved: **O-1** stack sign-off → D-07. Deferred by design: O-5/6/7 (billing, pricing, free cap).

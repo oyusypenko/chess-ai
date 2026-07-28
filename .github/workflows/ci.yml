@@ -100,6 +100,9 @@ jobs:
       - name: Browser tests (360 px)
         run: npm run test:browser:mobile
 
+      - name: Browser tests (desktop)
+        run: npx playwright test --project=desktop-1280
+
   guardrails:
     name: project hard rules
     runs-on: ubuntu-latest

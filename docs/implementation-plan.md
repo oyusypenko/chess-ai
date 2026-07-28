@@ -132,7 +132,10 @@ committed, so every contributor runs the same rules.
 
 ---
 
-## 4. P0 — validation demo (build order)
+## 4. P0 — validation demo (build order) — ✅ **all milestones complete**
+
+> Delivered 2026-07-28. Verification evidence per milestone is in [`progress.md`](progress.md),
+> along with the seven launch blockers that remain before P0 can go public.
 
 Each milestone lists deliverables, the design decisions that are not obvious, and its definition of
 done. PRD acceptance criteria are authoritative; anything here that contradicts them is a bug in
@@ -162,7 +165,7 @@ Playwright MCP, D-08 — do it in M2); NFR-P1 TTI measurement (needs a real page
 
 ---
 
-### M2 · Lichess import — US-A1 (partial), US-B1, FR-2
+### M2 · Lichess import ✅ **done 2026-07-28** — US-A1 (partial), US-B1, FR-2
 
 Turn a username into a normalized, provably-finished game.
 
@@ -204,7 +207,7 @@ src/app/api/import/route.ts // server route: validate → fetch → normalize
 
 ---
 
-### M3 · Engine analysis — US-C1, US-C2
+### M3 · Engine analysis ✅ **done 2026-07-28** — US-C1, US-C2
 
 Run Stockfish in the browser and produce an eval for every position.
 
@@ -244,7 +247,7 @@ public/engine/              // the Stockfish WASM artifact (GPLv3, arm's length)
 
 ---
 
-### M4 · Move classification — US-C4
+### M4 · Move classification ✅ **done 2026-07-28** — US-C4
 
 Turn evals into labels a human can act on.
 
@@ -282,7 +285,7 @@ src/classifier/fixtures/          // ≥ 50 curated positions with expected labe
 
 ---
 
-### M5 · Report UI — US-G1, US-D2
+### M5 · Report UI ✅ **done 2026-07-28** — US-G1, US-D2
 
 The screen the whole product exists to render. **Mobile-first (D-08): 360 px is built and verified
 first, not last.**
@@ -324,7 +327,7 @@ src/features/report/             // page composition + staged loading
 
 ---
 
-### M6 · AI summary — US-D1, FR-4
+### M6 · AI summary ✅ **done 2026-07-28** — US-D1, FR-4
 
 The only place a language model touches the product — and the place with the strictest guardrail.
 
@@ -367,7 +370,7 @@ src/app/api/report/route.ts// server-mediated call, cost telemetry, degradation
 
 ---
 
-### M7 · Launch hardening — US-A1, FR-6, NFR-PR2, NFR-L2/L3
+### M7 · Launch hardening ✅ **done 2026-07-28** — US-A1, FR-6, NFR-PR2, NFR-L2/L3
 
 **Deliverables & decisions**
 

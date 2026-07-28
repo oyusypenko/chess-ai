@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { SiteFooter } from "@/components/site-footer";
 
 /**
  * `next/font/google` downloads these at BUILD time and self-hosts them from our
@@ -32,7 +33,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
-      <body className="flex min-h-full flex-col">{children}</body>
+      <body className="flex min-h-full flex-col">
+        {children}
+        {/* Legal links must be reachable from every page: the attribution page
+            carries our GPLv3 source offer (NFR-L3), and privacy/terms are
+            launch requirements (NFR-PR2). */}
+        <SiteFooter />
+      </body>
     </html>
   );
 }
