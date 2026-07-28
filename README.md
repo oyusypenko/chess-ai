@@ -91,8 +91,36 @@ single-threaded fallback rather than an error.
 npm install
 npm run dev          # http://localhost:3000
 npm run validate     # typecheck + lint + format + unit tests (the local CI mirror)
+npm run test:e2e     # build, then the Playwright suite at 360px and 1280px
 npm run preview      # build and run the real Cloudflare Worker locally
 ```
+
+### The pre-commit hook
+
+`npm install` points git at `.githooks/` (via the `prepare` script), so every commit runs the
+full gate: typecheck, lint, format, unit and integration tests, the project hard rules, a build,
+the FR-7 cross-origin-isolation smoke test, and the end-to-end browser suite. About 50 seconds.
+
+The browser suite is in there on purpose. Every expensive bug in this project so far has been one
+only a real browser and a real server could surface — COOP/COEP silently absent so the engine
+dropped to a single thread, a `Secure` cookie that browsers sent to loopback and HTTP clients
+didn't, a seeded database unlinked out from under a live file handle. None of those fail a unit
+test.
+
+It builds before running Playwright, always: `next start` serves whatever was last built, and a
+stale build is worse than no run at all — missing routes return 404 and read as application bugs.
+
+When it's the wrong trade:
+
+```bash
+SKIP_E2E=1 git commit …   # static checks + unit tests only (~10s)
+git commit --no-verify …  # skip the hook entirely
+```
+
+The hook checks the working tree rather than the staged index. Stashing unstaged changes to
+isolate the index is the textbook approach and it loses work when a run is interrupted; the cost
+is that a partial `git add` can pass the hook and still commit something broken, which is what CI
+is for.
 
 Verifying cross-origin isolation (FR-7) needs a build first:
 

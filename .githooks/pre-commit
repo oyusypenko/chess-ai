@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+#
+# Pre-commit: the full gate — static checks, hard rules, unit/integration tests,
+# and the end-to-end browser suite.
+#
+# ## Why the browser suite runs here and not only in CI
+#
+# Every genuinely expensive bug in this project so far has been one that only a
+# real browser and a real server could show: COOP/COEP silently absent so the
+# engine dropped to one thread, a `Secure` cookie that browsers sent to loopback
+# and HTTP clients did not, a seeded database unlinked out from under a live
+# file handle. None of those fail a unit test. Finding them ten minutes later in
+# CI is finding them after the context is gone.
+#
+# ## The build step is not optional
+#
+# `next start` serves whatever `.next` was last built. Running Playwright
+# against a stale build is worse than not running it: routes that do not exist
+# yet return 404 and the failures look like application bugs. So the suite
+# builds first, always.
+#
+# ## Cost, and the escape hatches
+#
+# Roughly 90 seconds. When that is the wrong trade — a docs typo, a work-in-
+# progress commit on a branch — say so explicitly:
+#
+#   SKIP_E2E=1 git commit …    static checks + unit tests only (~15s)
+#   git commit --no-verify …   skip the hook entirely
+#
+# ## What it checks
+#
+# The **working tree**, not the staged index. Deliberate: stashing unstaged
+# changes to isolate the index is the textbook approach and it loses work when
+# the hook is interrupted mid-run. The trade is that a partial `git add` can
+# produce a passing hook and a broken commit; CI is the backstop for that.
+set -uo pipefail
+
+bold=$'\033[1m'; red=$'\033[31m'; green=$'\033[32m'; dim=$'\033[2m'; reset=$'\033[0m'
+
+started=$(date +%s)
+failures=()
+
+step() {
+  local name="$1"; shift
+  printf '%s▸ %s%s\n' "$bold" "$name" "$reset"
+  if "$@" >/tmp/ccai-precommit.log 2>&1; then
+    printf '  %s✓%s %s\n' "$green" "$reset" "$name"
+  else
+    printf '  %s✗ %s failed%s\n' "$red" "$name" "$reset"
+    # Only the tail: a full Next build log buries the one line that matters.
+    sed 's/^/    /' /tmp/ccai-precommit.log | tail -40
+    failures+=("$name")
+  fi
+}
+
+printf '%sChessCoach AI — pre-commit%s\n' "$bold" "$reset"
+
+step "typecheck"      npm run --silent typecheck
+step "lint"           npm run --silent lint
+step "format"         npm run --silent format:check
+step "unit + integration tests" npm run --silent test
+
+printf '%s▸ project hard rules%s\n' "$bold" "$reset"
+if bash scripts/guardrails.sh; then
+  :
+else
+  failures+=("project hard rules")
+fi
+
+if [ "${SKIP_E2E:-}" = "1" ]; then
+  printf '%s▸ e2e — skipped (SKIP_E2E=1)%s\n' "$dim" "$reset"
+else
+  # Build first: Playwright runs `next start`, which serves the last build.
+  step "build" npm run --silent build
+  # Only worth attempting if the build produced something to serve.
+  if [ ${#failures[@]} -eq 0 ]; then
+    step "cross-origin isolation smoke (FR-7)" npm run --silent test:headers
+    step "e2e browser suite" npx playwright test
+  else
+    printf '  %s— e2e skipped: an earlier step failed%s\n' "$dim" "$reset"
+  fi
+fi
+
+elapsed=$(( $(date +%s) - started ))
+
+if [ ${#failures[@]} -gt 0 ]; then
+  printf '\n%s✗ commit blocked after %ss%s — %s\n' "$red" "$elapsed" "$reset" "${failures[*]}"
+  printf '%sRe-run a single step for detail, e.g. npm run lint%s\n' "$dim" "$reset"
+  printf '%sTo bypass deliberately: git commit --no-verify%s\n' "$dim" "$reset"
+  exit 1
+fi
+
+printf '\n%s✓ all checks passed in %ss%s\n' "$green" "$elapsed" "$reset"

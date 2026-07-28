@@ -73,9 +73,16 @@ must keep working (NFR-C1).
 
 `npm run validate` — typecheck + lint + format + unit tests, the local CI mirror ·
 `npm run dev` · `npm run build` · `npm test` (Vitest) ·
+`npm run test:e2e` — build + the Playwright suite (360 px and 1280 px) ·
+`npm run guardrails` — the project hard rules, the same script CI and the pre-commit hook run ·
 `npm run test:headers` — FR-7 smoke test (needs a prior `npm run build`; set `SMOKE_BASE_URL` to
 run it against a Worker or a deployed URL instead) · `npm run preview` — the real Worker locally ·
 `npm run deploy` — Cloudflare.
+
+**Pre-commit** (`.githooks/pre-commit`, wired by `npm install` via `prepare`) runs all of the
+above — including a build and the browser suite — in about 50 s. `SKIP_E2E=1` drops it to ~10 s;
+`--no-verify` skips it. Always **build before running Playwright**: `next start` serves the last
+build, so a stale one makes missing routes look like application bugs.
 
 ## MCP (`.mcp.json`, committed)
 

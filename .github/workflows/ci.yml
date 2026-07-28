@@ -110,30 +110,12 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # Mirrors the Claude Code write-time hook so the rules hold for every
-      # contributor and every tool, not just one editor.
-      # NFR-L3: chessground/chessops are GPL-3.0 and would relicense our bundle.
-      - name: No GPL board libraries in dependencies
-        run: |
-          if grep -nE '"(chessground|chessops)"[[:space:]]*:' package.json; then
-            echo "::error::GPL-3.0 dependency found (chessground/chessops) — see NFR-L3 and docs/decisions.md D-01"
-            exit 1
-          fi
-          echo "OK: no GPL board libraries"
-
-      - name: No live-game analysis surfaces (NFR-L1)
-        run: |
-          if grep -rInE '\b(streamIncomingGame|boardStreamGameState|analyzeLiveGame|liveGameEval)\b' \
-              --include='*.ts' --include='*.tsx' src/ 2>/dev/null; then
-            echo "::error::live-game surface found — post-game analysis only (NFR-L1)"
-            exit 1
-          fi
-          echo "OK: no live-game surfaces"
-
-      - name: Cross-origin isolation headers still declared (FR-7)
-        run: |
-          for f in next.config.ts public/_headers; do
-            grep -q "Cross-Origin-Opener-Policy" "$f" && grep -q "Cross-Origin-Embedder-Policy" "$f" \
-              || { echo "::error::$f lost COOP/COEP — FR-7"; exit 1; }
-          done
-          echo "OK: COOP/COEP declared in next.config.ts and public/_headers"
+      # One implementation, called from both CI and .githooks/pre-commit.
+      # Inlining these checks here as well produced two copies that agreed only
+      # until one was edited — and the copy that silently stopped matching is
+      # the one that stops catching anything.
+      #
+      # Covers NFR-L3 (no GPL board libraries), NFR-L1 (no live-game surfaces),
+      # FR-7 (COOP/COEP still declared) and NFR-S1 (no secrets staged).
+      - name: Project hard rules
+        run: bash scripts/guardrails.sh
