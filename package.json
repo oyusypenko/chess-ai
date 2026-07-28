@@ -24,6 +24,7 @@
     "test:browser:mobile": "playwright test --project=mobile-360"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.115.0",
     "@lichess-org/stockfish-web": "^0.4.2",
     "chess.js": "^1.4.0",
     "next": "16.2.12",
