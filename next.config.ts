@@ -1,5 +1,4 @@
 import type { NextConfig } from "next";
-import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
 
 /**
  * Cross-origin isolation headers (FR-7).
@@ -52,7 +51,21 @@ const nextConfig: NextConfig = {
 export default nextConfig;
 
 // Makes Cloudflare bindings available during `next dev`, so local development
-// behaves like the deployed Worker instead of diverging from it. The call is
-// a no-op outside `next dev`, and is deliberately NOT awaited: Next loads this
-// config through `require()`, which cannot handle a top-level await.
-initOpenNextCloudflareForDev();
+// behaves like the deployed Worker instead of diverging from it.
+//
+// Loaded lazily and only in development, for a reason worth stating: this
+// package is a **devDependency**. A static import makes the whole config fail
+// to load in any runtime that prunes dev dependencies (`npm ci --omit=dev`,
+// which is exactly what the production Docker stage does). The config failing
+// to load means COOP/COEP are never applied — FR-7 silently gone, with the
+// engine dropping to single-threaded and nothing reporting an error.
+//
+// Not awaited: Next loads this config through `require()`, which cannot handle
+// a top-level await. The `.catch` keeps a missing package from being fatal.
+if (process.env.NODE_ENV === "development") {
+  import("@opennextjs/cloudflare")
+    .then(({ initOpenNextCloudflareForDev }) => initOpenNextCloudflareForDev())
+    .catch(() => {
+      // Cloudflare tooling absent — fine, dev still works without bindings.
+    });
+}

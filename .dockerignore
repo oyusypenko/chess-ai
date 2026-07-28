@@ -1,0 +1,38 @@
+# Build context hygiene — everything here is either rebuilt in the image,
+# irrelevant to it, or must never enter it.
+
+# Rebuilt inside the image
+node_modules
+.next
+.open-next
+.wrangler
+out
+dist
+test-results
+playwright-report
+
+# Fetched by scripts/fetch-engine-assets.mjs in its own cached layer.
+# ~15 MB of GPLv3 artifacts that would otherwise bloat every build context.
+public/engine
+
+# Secrets must never reach a build layer — layers are cached and shippable.
+.env
+.env.*
+!.env.example
+secrets
+*.pem
+*.key
+
+# VCS and tooling
+.git
+.github
+.idea
+.vscode
+.DS_Store
+
+# Agent config — useful to humans, not to the runtime
+.claude
+CLAUDE.md
+CLAUDE.local.md
+docs
+README.md

@@ -1,0 +1,93 @@
+# ChessCoach AI — local orchestration.
+#
+# Production is Cloudflare Workers (D-05); these services are for development,
+# testing, and self-hosting. Run one:
+#
+#   docker compose up dev          # hot-reload dev server on :3000
+#   docker compose up app          # production-mode image on :3000
+#   docker compose run --rm test   # unit suite (235+ tests)
+#   docker compose run --rm e2e    # Playwright at a 360px baseline (D-08)
+#   docker compose run --rm smoke  # FR-7 COOP/COEP assertions against `app`
+
+name: chess-ai
+
+services:
+  # Hot-reload development. Source is mounted; node_modules and build output are
+  # kept in named volumes so the container's Linux binaries are not clobbered by
+  # a host macOS/Windows install.
+  dev:
+    build:
+      context: .
+      target: dev
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - node_modules:/app/node_modules
+      - next_cache:/app/.next
+      - engine_assets:/app/public/engine
+    environment:
+      NODE_ENV: development
+      WATCHPACK_POLLING: "true" # bind-mount FS events are unreliable across OSes
+    env_file:
+      - path: .env.local
+        required: false
+
+  # Production-mode image — what a self-hosted deployment would run.
+  app:
+    build:
+      context: .
+      target: runner
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+    env_file:
+      - path: .env.local
+        required: false
+    restart: unless-stopped
+
+  # Unit + integration suite. No network, no ports — it must not need either.
+  test:
+    build:
+      context: .
+      target: dev
+    command: npm test
+    volumes:
+      - .:/app
+      - node_modules:/app/node_modules
+      - engine_assets:/app/public/engine
+    environment:
+      CI: "1"
+
+  # Browser tests. Uses Playwright's image because Chromium's system libraries
+  # are a moving target not worth hand-rolling.
+  e2e:
+    build:
+      context: .
+      target: e2e
+    environment:
+      CI: "1"
+    # Runs its own server via playwright.config.ts `webServer`.
+
+  # FR-7 gate: asserts the served COOP/COEP headers on a running container.
+  # Without them SharedArrayBuffer is unavailable and the engine silently drops
+  # to single-threaded (US-C1, NFR-C1).
+  smoke:
+    build:
+      context: .
+      target: dev
+    depends_on:
+      app:
+        condition: service_healthy
+    command: npm run test:headers
+    environment:
+      SMOKE_BASE_URL: http://app:3000
+    volumes:
+      - .:/app
+      - node_modules:/app/node_modules
+
+volumes:
+  node_modules:
+  next_cache:
+  engine_assets:
