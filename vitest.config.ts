@@ -7,7 +7,7 @@ export default defineConfig({
     // tests/smoke/** runs under `node --test` (needs a real server) and is
     // driven by `npm run test:headers`, not vitest.
     include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
-    exclude: ["node_modules", ".next", "tests/smoke/**"],
+    exclude: ["node_modules", ".next", ".open-next", "tests/smoke/**", "tests/browser/**"],
   },
   resolve: {
     alias: { "@": new URL("./src", import.meta.url).pathname },

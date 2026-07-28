@@ -5,3 +5,7 @@ node_modules/
 package-lock.json
 cloudflare-env.d.ts
 docs/prd.md
+
+public/engine/
+test-results/
+playwright-report/

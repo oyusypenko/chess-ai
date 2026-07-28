@@ -16,9 +16,23 @@ License version 3**.
 
 - Upstream: https://github.com/official-stockfish/Stockfish
 - WASM build we ship: `@lichess-org/stockfish-web` — https://github.com/lichess-org/stockfish-web
-- Version shipped: _TBD at M3_
-- **Source offer:** _TBD — must link to the exact source corresponding to the binary we serve,_
-  _hosted by us or a permanent upstream link, per GPLv3 §6._
+- **Build shipped:** `sf_18_smallnet` (Stockfish 18 with the `sscg13/threat-small` network), from
+  `@lichess-org/stockfish-web` — exact version pinned in `package-lock.json`.
+- **Files served** from `/engine/` (staged by `scripts/fetch-engine-assets.mjs`, not committed):
+  `sf_18_smallnet.js`, `sf_18_smallnet.wasm`, `nn-4ca89e4b3abf.nnue` (14.4 MB), and a verbatim
+  copy of the GPLv3 licence as `LICENSE.stockfish.txt`.
+- **Neural network:** `nn-4ca89e4b3abf.nnue`, fetched from `data.stockfishchess.org`. Self-hosted
+  rather than CDN-loaded because COEP `require-corp` (FR-7) blocks cross-origin subresources — the
+  same headers the threaded engine requires.
+- **Source offer:** _still TBD — a launch blocker._ Must resolve to the exact sources corresponding
+  to the binaries we serve. Two acceptable forms under GPLv3 §6: link the upstream commits that
+  `@lichess-org/stockfish-web` built from (its `patches/sf_18.patch` plus the pinned Stockfish
+  base commit), or mirror those sources ourselves. Pick one and publish it on the user-facing
+  attribution page before launch.
+
+**Why the small net:** the big-net build (`sf_18`) needs two networks totalling far more download
+for a strength difference that does not change a move's classification at depth 18. On mobile web —
+our primary surface (US-G1) — payload decides whether the feature is usable at all (NFR-P1).
 
 **Boundary (NFR-L3):** Stockfish runs as a **separate WebAssembly artifact loaded at runtime** in a
 Web Worker, communicated with over the UCI protocol via `postMessage`. It is not linked, inlined,

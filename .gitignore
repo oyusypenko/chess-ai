@@ -33,3 +33,11 @@ next-env.d.ts
 .open-next/
 .wrangler/
 cloudflare-env.d.ts
+
+# Engine artifacts — fetched by scripts/fetch-engine-assets.mjs (GPLv3, ~15MB).
+# Reproducible from the lockfile + content-hashed network filename.
+/public/engine/
+
+# Playwright
+/test-results/
+/playwright-report/

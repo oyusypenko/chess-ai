@@ -80,6 +80,26 @@ jobs:
           SMOKE_BASE_URL=http://127.0.0.1:8788 npm run test:headers
           pkill -f "wrangler dev" || true
 
+  browser:
+    name: browser — isolation + engine (FR-7, US-C1)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      # prebuild stages the GPLv3 engine artifacts into public/engine.
+      - name: Build
+        run: npm run build
+      # Mobile-first (D-08): 360 px is the baseline viewport, not an extra.
+      - name: Browser tests (360 px)
+        run: npm run test:browser:mobile
+
   guardrails:
     name: project hard rules
     runs-on: ubuntu-latest

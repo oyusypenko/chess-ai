@@ -17,6 +17,10 @@ const eslintConfig = defineConfig([
     ".open-next/**",
     ".wrangler/**",
     "cloudflare-env.d.ts",
+    // Third-party GPLv3 engine artifacts staged by scripts/fetch-engine-assets.mjs.
+    // Not ours to lint or reformat — and reformatting a GPL artifact in place
+    // would blur exactly the boundary NFR-L3 depends on staying crisp.
+    "public/engine/**",
   ]),
 ]);
 
